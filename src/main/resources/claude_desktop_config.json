@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "github-code-analyzer": {
+      "command": "java",
+      "args": [
+        "-jar",
+        "/Users/mariano/development/mcp-repository-analysis/build/libs/kotlin-mcp-server-0.1.0.jar",
+        "--stdio"
+      ]
+    }
+  }
+}
