@@ -4,7 +4,7 @@
       "command": "java",
       "args": [
         "-jar",
-        "/Users/mariano/development/mcp-repository-analysis/build/libs/kotlin-mcp-server-0.1.0.jar",
+        "/Users/mariano/development/mcp-github-code-analyzer/build/libs/mcp-github-code-analyzer-1.0-SNAPSHOT.jar",
         "--stdio"
       ]
     }
