@@ -10,28 +10,24 @@ group = "mcp.code.analysis"
 version = "1.0-SNAPSHOT"
 
 dependencies {
-  // Kotlin standard library
   implementation(kotlin("stdlib"))
-  implementation("io.ktor:ktor-server-sse:3.1.3")
 
   // Ktor server
   val ktorVersion = "3.1.3"
+  implementation("io.ktor:ktor-server-sse:$ktorVersion")
   implementation("io.ktor:ktor-server-core:$ktorVersion")
   implementation("io.ktor:ktor-server-netty:$ktorVersion")
   implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
   implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
   implementation("io.ktor:ktor-server-openapi:$ktorVersion")
 
-  // MCP SDK
-  implementation("io.modelcontextprotocol:kotlin-sdk:0.5.0")
-
-  // Swagger
-  implementation("io.swagger.core.v3:swagger-core:2.2.20")
-
-  // Ktor client for GitHub API
+  // Ktor client
   implementation("io.ktor:ktor-client-core:$ktorVersion")
   implementation("io.ktor:ktor-client-cio:$ktorVersion")
   implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+
+  // MCP SDK
+  implementation("io.modelcontextprotocol:kotlin-sdk:0.5.0")
 
   // Logging
   implementation("ch.qos.logback:logback-classic:1.5.18")
@@ -42,8 +38,12 @@ dependencies {
   // Serialization
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 
-  // JGit for repository interaction
+  // JGit
   implementation("org.eclipse.jgit:org.eclipse.jgit:6.7.0.202309050840-r")
+
+  // LSP
+  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.24.0")
+  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc:0.24.0")
 
   // Testing
   testImplementation(kotlin("test"))

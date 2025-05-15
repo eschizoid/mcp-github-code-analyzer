@@ -23,6 +23,7 @@ data class AnalysisResult(
  * This service provides methods to clone a repository, analyze its code structure, and generate
  * insights based on the analysis.
  */
+@Deprecated("Use RepositoryASTAnalyzer instead")
 class RepositoryAnalysisService {
 
   companion object {
@@ -40,7 +41,7 @@ class RepositoryAnalysisService {
     val initialResult = AnalysisResult(id, "pending")
     analyses[id] = initialResult
 
-    // Start analysis in background
+    // Start analysis in the background
     GlobalScope.launch(Dispatchers.IO) {
       try {
         // Clone repository

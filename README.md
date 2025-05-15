@@ -15,7 +15,7 @@ models.
 
 ### Prerequisites
 
-- JDK 11 or higher
+- JDK 23 or higher
 - Kotlin 1.9.x
 - An API key for the model service (optional)
 
