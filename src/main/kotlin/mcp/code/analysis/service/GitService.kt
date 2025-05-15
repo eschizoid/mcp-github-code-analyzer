@@ -5,10 +5,21 @@ import java.nio.file.Files
 import mcp.code.analysis.config.AppConfig
 import org.eclipse.jgit.api.Git
 
-/** Service for interacting with Git repositories. */
+/**
+ * GitService is responsible for cloning Git repositories and checking out branches.
+ *
+ * @param config The application configuration containing the working directory.
+ */
 class GitService {
   private val config = AppConfig()
 
+  /**
+   * Clones a Git repository and checks out the specified branch.
+   *
+   * @param repoUrl The URL of the Git repository to clone.
+   * @param branch The branch to check out after cloning.
+   * @return The directory where the repository is cloned.
+   */
   fun cloneRepository(repoUrl: String, branch: String): File {
     val workDir = File(config.workingDirectory)
     if (!workDir.exists()) {

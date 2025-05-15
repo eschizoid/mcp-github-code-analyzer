@@ -8,6 +8,7 @@ import io.ktor.server.sse.*
 import io.ktor.util.collections.*
 import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.server.*
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSink
@@ -16,7 +17,9 @@ import kotlinx.io.buffered
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
-import mcp.code.analysis.service.RepositoryAnalysisService
+import mcp.code.analysis.config.AppConfig
+import mcp.code.analysis.service.GitService
+import mcp.code.analysis.service.RepositoryAstAnalyzer
 
 /**
  * Start sse-server mcp on port 3001.
@@ -54,7 +57,9 @@ fun configureServer(): Server {
       ),
     )
 
-  val analysisService = RepositoryAnalysisService()
+  val config = AppConfig()
+  val workDir = File(config.workingDirectory)
+  val analysisService = RepositoryAstAnalyzer(workDir, GitService())
 
   server.addTool(
     name = "GitHub Code Analyzer",
@@ -79,14 +84,6 @@ fun configureServer(): Server {
                     "description" to JsonPrimitive("Branch to analyze (default: main)"),
                   )
                 ),
-              "analysisType" to
-                JsonObject(
-                  mapOf(
-                    "type" to JsonPrimitive("string"),
-                    "description" to
-                      JsonPrimitive("Analysis type: 'quick', 'core', or 'comprehensive'"),
-                  )
-                ),
             )
           ),
         required = listOf("repoUrl"),
@@ -98,77 +95,21 @@ fun configureServer(): Server {
         arguments["repoUrl"]?.jsonPrimitive?.content
           ?: throw IllegalArgumentException("Missing repoUrl parameter")
       val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
-      val analysisType = arguments["analysisType"]?.jsonPrimitive?.content ?: "quick"
-      val result = analysisService.analyzeRepository(repoUrl, branch, analysisType)
+      val result = analysisService.analyzeRepository(repoUrl, branch)
 
       CallToolResult(
         content =
           listOf(
             TextContent(
-              "Repository analysis started with ID: ${result.id}\n" +
-                "Current status: ${result.status}\n" +
-                "You can check the status using the status-check tool with this ID."
+              "Analysis result for $repoUrl on branch $branch:\n" +
+                "ASTs found:\n" +
+                result.entries.joinToString("\n") { "${it.key}: ${it.value}" }
             )
           )
       )
     } catch (e: Exception) {
       CallToolResult(
         content = listOf(TextContent("Error analyzing repository: ${e.message}")),
-        isError = true,
-      )
-    }
-  }
-
-  // Add a tool to check analysis status
-  server.addTool(
-    name = "GitHub Code Analyzer Status Check",
-    description = "Check status of a previously started repository analysis",
-    inputSchema =
-      Tool.Input(
-        properties =
-          JsonObject(
-            mapOf(
-              "id" to
-                JsonObject(
-                  mapOf(
-                    "type" to JsonPrimitive("string"),
-                    "description" to JsonPrimitive("Analysis ID to check"),
-                  )
-                )
-            )
-          ),
-        required = listOf("id"),
-      ),
-  ) { request ->
-    try {
-      val arguments = request.arguments
-      val analysisId =
-        arguments["id"]?.jsonPrimitive?.content
-          ?: throw IllegalArgumentException("Missing analysis ID")
-
-      val status = analysisService.getAnalysisStatus(analysisId)
-
-      val responseContent = StringBuilder()
-      responseContent.append("Analysis ID: ${status.id}\n")
-      responseContent.append("Status: ${status.status}\n")
-
-      if (status.status == "completed") {
-        responseContent.append("\n## Summary\n${status.summary ?: "No summary available"}\n")
-
-        if (!status.insights.isNullOrEmpty()) {
-          responseContent.append("\n## Key Insights\n")
-          status.insights.forEachIndexed { index, insight ->
-            responseContent.append("${index + 1}. $insight\n")
-          }
-        }
-      } else if (status.status == "failed") {
-        responseContent.append("\nError: ${status.summary}")
-      }
-
-      CallToolResult(content = listOf(TextContent(responseContent.toString())))
-    } catch (e: Exception) {
-      CallToolResult(
-        content = listOf(TextContent("Error checking status: ${e.message}")),
         isError = true,
       )
     }
