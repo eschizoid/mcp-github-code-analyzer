@@ -7,7 +7,9 @@ package mcp.code.analysis.config
 class AppConfig {
   val serverPort: Int = System.getenv("SERVER_PORT")?.toIntOrNull() ?: 8080
   val githubToken: String = System.getenv("GITHUB_TOKEN") ?: ""
-  val workingDirectory: String = System.getenv("WORKING_DIRECTORY") ?: "temp"
+  val workingDirectory: String =
+    System.getenv("WORKING_DIRECTORY")
+      ?: System.getProperty("java.io.tmpdir").plus("/mcp-code-analysis")
 
   // Default to local Ollama instance
   val modelApiUrl: String = System.getenv("MODEL_API_URL") ?: "http://localhost:11434/api"
