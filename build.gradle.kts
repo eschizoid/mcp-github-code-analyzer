@@ -61,7 +61,10 @@ kotlin { jvmToolchain(23) }
 
 spotless {
   kotlin {
-    ktfmt().googleStyle()
+    ktfmt().googleStyle().configure {
+      it.setMaxWidth(120)
+      it.setRemoveUnusedImports(true)
+    }
     toggleOffOn()
     target("**/*.kt")
     trimTrailingWhitespace()
@@ -69,7 +72,10 @@ spotless {
   }
 
   kotlinGradle {
-    ktfmt().googleStyle()
+    ktfmt().googleStyle().configure {
+      it.setMaxWidth(120)
+      it.setRemoveUnusedImports(true)
+    }
     target("*.gradle.kts")
   }
 }
