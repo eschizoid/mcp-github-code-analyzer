@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+
+    <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
         <encoder>
             <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
     <root level="INFO">
-        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="STDERR"/>
     </root>
 
-    <logger name="org.eclipse.jetty" level="INFO"/>
+    <logger name="io.modelcontextprotocol.kotlin.sdk.server" level="WARN"/>
     <logger name="io.netty" level="INFO"/>
+    <logger name="org.eclipse.jetty" level="INFO"/>
 </configuration>
