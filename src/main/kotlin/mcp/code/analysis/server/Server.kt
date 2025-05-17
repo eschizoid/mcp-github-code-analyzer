@@ -22,14 +22,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import mcp.code.analysis.service.RepositoryAnalysisService
 import org.slf4j.LoggerFactory
 
-/**
- * Server for analyzing GitHub repositories using the Model Context Protocol (MCP). Provides functionalities for
- * analyzing GitHub repositories and checking analysis status.
- */
-class Server {
+object Server {
 
-  private val logger = LoggerFactory.getLogger(this::class.java)
-  private val analysisService = RepositoryAnalysisService()
+  private val logger = LoggerFactory.getLogger(Server::class.java)
 
   /**
    * Starts an MCP server using standard input/output (stdio) for communication.
@@ -37,23 +32,18 @@ class Server {
    * This method configures the server and connects it to the standard input and output streams. It will handle listing
    * prompts, tools, and resources automatically.
    */
-  fun runMcpServerUsingStdio() {
-    // Note: The server will handle listing prompts, tools, and resources automatically.
-    // The handleListResourceTemplates will return empty as defined in the Server code.
+  fun runMcpServerUsingStdio() = runBlocking {
     val server = configureServer()
     val transport =
       StdioServerTransport(
         inputStream = System.`in`.asSource().buffered(),
         outputStream = System.out.asSink().buffered(),
       )
-
-    runBlocking {
-      server.connect(transport)
-      val done = Job()
-      server.onClose { done.complete() }
-      done.join()
-      logger.info("Server closed")
-    }
+    server.connect(transport)
+    val done = Job()
+    server.onClose { done.complete() }
+    done.join()
+    logger.info("Server closed")
   }
 
   /**
@@ -61,9 +51,9 @@ class Server {
    *
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
-  fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
+  fun runSseMcpServerWithPlainConfiguration(port: Int) = runBlocking {
     val servers = ConcurrentMap<String, SdkServer>()
-    logger.info("Starting sse server on port $port. ")
+    logger.info("Starting sse server on port $port.")
     logger.info("Use inspector to connect to the http://localhost:$port/sse")
 
     embeddedServer(CIO, host = "0.0.0.0", port = port) {
@@ -71,29 +61,22 @@ class Server {
         routing {
           sse("/sse") {
             val transport = SseServerTransport("/message", this)
-            val server: SdkServer = configureServer()
-
-            // For SSE, you can also add prompts/tools/resources if needed:
-            // server.addTool(...), server.addPrompt(...), server.addResource(...)
-
+            val server = configureServer()
             servers[transport.sessionId] = server
-
             server.onClose {
               logger.info("Server closed")
               servers.remove(transport.sessionId)
             }
-
             server.connect(transport)
           }
           post("/message") {
             logger.info("Received Message")
-            val sessionId: String = call.request.queryParameters["sessionId"]!!
+            val sessionId = call.request.queryParameters["sessionId"]!!
             val transport = servers[sessionId]?.transport as? SseServerTransport
             if (transport == null) {
               call.respond(HttpStatusCode.NotFound, "Session not found")
               return@post
             }
-
             transport.handlePostMessage(call)
           }
         }
@@ -106,23 +89,12 @@ class Server {
    *
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
-  fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
+  fun runSseMcpServerUsingKtorPlugin(port: Int) = runBlocking {
     logger.info("Starting sse server on port $port")
     logger.info("Use inspector to connect to the http://localhost:$port/sse")
-
-    embeddedServer(CIO, host = "0.0.0.0", port = port) {
-        mcp {
-          return@mcp configureServer()
-        }
-      }
-      .start(wait = true)
+    embeddedServer(CIO, host = "0.0.0.0", port = port) { mcp { configureServer() } }.start(wait = true)
   }
 
-  /**
-   * Configures the MCP server with tools and their respective functionalities.
-   *
-   * @return The configured MCP server instance.
-   */
   private fun configureServer(): SdkServer {
     val server =
       SdkServer(
@@ -156,7 +128,7 @@ class Server {
                   JsonObject(
                     mapOf(
                       "type" to JsonPrimitive("string"),
-                      "description" to JsonPrimitive("Branch to analyze (default: mcp.code.analysis.server.main)"),
+                      "description" to JsonPrimitive("Branch to analyze (default: main)"),
                     )
                   ),
               )
@@ -169,8 +141,7 @@ class Server {
         val repoUrl =
           arguments["repoUrl"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Missing repoUrl parameter")
         val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
-        val result = analysisService.analyzeRepository(repoUrl, branch)
-
+        val result = RepositoryAnalysisService.analyzeRepository(repoUrl = repoUrl, branch = branch)
         CallToolResult(content = listOf(TextContent(result)))
       } catch (e: Exception) {
         CallToolResult(content = listOf(TextContent("Error analyzing repository: ${e.message}")), isError = true)

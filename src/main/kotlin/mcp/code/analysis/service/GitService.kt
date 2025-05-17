@@ -6,14 +6,15 @@ import mcp.code.analysis.config.AppConfig
 import org.eclipse.jgit.api.Git
 
 /** Service for interacting with Git repositories. */
-class GitService {
-  private val config = AppConfig()
+object GitService {
+  private val config = AppConfig.fromEnv()
 
   /**
    * Clones a Git repository to a temporary directory.
    *
    * @param repoUrl The URL of the Git repository to clone.
    * @param branch The branch of the repository to clone (default is "main").
+   * @param config The application configuration (provides working directory).
    * @return The path to the cloned repository.
    */
   fun cloneRepository(repoUrl: String, branch: String): File {
@@ -21,14 +22,11 @@ class GitService {
     if (!workDir.exists()) {
       workDir.mkdirs()
     }
-
     val repoName = extractRepoName(repoUrl)
     val targetDir = Files.createTempDirectory(workDir.toPath(), repoName).toFile()
-
     Git.cloneRepository().setURI(repoUrl).setDirectory(targetDir).setBranch(branch).call().use { git ->
       git.checkout().setName(branch).call()
     }
-
     return targetDir
   }
 
