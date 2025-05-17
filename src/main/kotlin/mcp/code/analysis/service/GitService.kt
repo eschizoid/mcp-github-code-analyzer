@@ -9,6 +9,13 @@ import org.eclipse.jgit.api.Git
 class GitService {
   private val config = AppConfig()
 
+  /**
+   * Clones a Git repository to a temporary directory.
+   *
+   * @param repoUrl The URL of the Git repository to clone.
+   * @param branch The branch of the repository to clone (default is "main").
+   * @return The path to the cloned repository.
+   */
   fun cloneRepository(repoUrl: String, branch: String): File {
     val workDir = File(config.workingDirectory)
     if (!workDir.exists()) {
@@ -18,14 +25,12 @@ class GitService {
     val repoName = extractRepoName(repoUrl)
     val targetDir = Files.createTempDirectory(workDir.toPath(), repoName).toFile()
 
-    Git.cloneRepository().setURI(repoUrl).setDirectory(targetDir).setBranch(branch).call().use { git
-      ->
+    Git.cloneRepository().setURI(repoUrl).setDirectory(targetDir).setBranch(branch).call().use { git ->
       git.checkout().setName(branch).call()
     }
 
     return targetDir
   }
 
-  private fun extractRepoName(repoUrl: String): String =
-    repoUrl.substringAfterLast("/").removeSuffix(".git")
+  private fun extractRepoName(repoUrl: String): String = repoUrl.substringAfterLast("/").removeSuffix(".git")
 }

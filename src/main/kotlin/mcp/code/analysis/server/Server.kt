@@ -22,11 +22,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import mcp.code.analysis.service.RepositoryAnalysisService
 import org.slf4j.LoggerFactory
 
-/*
- * This Kotlin code defines a server for analyzing GitHub repositories using the Model Context Protocol (MCP).
- * It provides two main functionalities:
- * 1. Analyzing a GitHub repository to provide code insights and structure summary.
- * 2. Checking the status of a previously started repository analysis.
+/**
+ * Server for analyzing GitHub repositories using the Model Context Protocol (MCP). Provides functionalities for
+ * analyzing GitHub repositories and checking analysis status.
  */
 class Server {
 
@@ -36,10 +34,8 @@ class Server {
   /**
    * Starts an MCP server using standard input/output (stdio) for communication.
    *
-   * This method configures the server and connects it to the standard input and output streams. It
-   * will handle listing prompts, tools, and resources automatically.
-   *
-   * @return Unit This method does not return a value.
+   * This method configures the server and connects it to the standard input and output streams. It will handle listing
+   * prompts, tools, and resources automatically.
    */
   fun runMcpServerUsingStdio() {
     // Note: The server will handle listing prompts, tools, and resources automatically.
@@ -63,10 +59,7 @@ class Server {
   /**
    * Starts an SSE (Server Sent Events) MCP server using plain configuration and the specified port.
    *
-   * The url can be accessed in the MCP inspector at [http://localhost:$port]
-   *
    * @param port The port number on which the SSE MCP server will listen for client connections.
-   * @return Unit This method does not return a value.
    */
   fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
     val servers = ConcurrentMap<String, SdkServer>()
@@ -111,10 +104,7 @@ class Server {
   /**
    * Starts an SSE (Server Sent Events) MCP server using the Ktor framework and the specified port.
    *
-   * The url can be accessed in the MCP inspector at [http://localhost:$port]
-   *
    * @param port The port number on which the SSE MCP server will listen for client connections.
-   * @return Unit This method does not return a value.
    */
   fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
     logger.info("Starting sse server on port $port")
@@ -130,10 +120,6 @@ class Server {
 
   /**
    * Configures the MCP server with tools and their respective functionalities.
-   *
-   * This method sets up the server with a tool for analyzing GitHub repositories and another for
-   * checking the status of a previously started analysis. It defines the input schema and handles
-   * the requests for each tool.
    *
    * @return The configured MCP server instance.
    */
@@ -163,24 +149,14 @@ class Server {
                   JsonObject(
                     mapOf(
                       "type" to JsonPrimitive("string"),
-                      "description" to
-                        JsonPrimitive("GitHub repository URL (e.g., https://github.com/owner/repo)"),
+                      "description" to JsonPrimitive("GitHub repository URL (e.g., https://github.com/owner/repo)"),
                     )
                   ),
                 "branch" to
                   JsonObject(
                     mapOf(
                       "type" to JsonPrimitive("string"),
-                      "description" to
-                        JsonPrimitive("Branch to analyze (default: mcp.code.analysis.server.main)"),
-                    )
-                  ),
-                "analysisType" to
-                  JsonObject(
-                    mapOf(
-                      "type" to JsonPrimitive("string"),
-                      "description" to
-                        JsonPrimitive("Analysis type: 'quick', 'core', or 'comprehensive'"),
+                      "description" to JsonPrimitive("Branch to analyze (default: mcp.code.analysis.server.main)"),
                     )
                   ),
               )
@@ -191,81 +167,13 @@ class Server {
       try {
         val arguments = request.arguments
         val repoUrl =
-          arguments["repoUrl"]?.jsonPrimitive?.content
-            ?: throw IllegalArgumentException("Missing repoUrl parameter")
-        val branch = arguments["branch"]?.jsonPrimitive?.content ?: "mcp.code.analysis.server.main"
-        val analysisType = arguments["analysisType"]?.jsonPrimitive?.content ?: "quick"
-        val result = analysisService.analyzeRepository(repoUrl, branch, analysisType)
+          arguments["repoUrl"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Missing repoUrl parameter")
+        val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
+        val result = analysisService.analyzeRepository(repoUrl, branch)
 
-        CallToolResult(
-          content =
-            listOf(
-              TextContent(
-                "Repository analysis started with ID: ${result.id}\n" +
-                  "Current status: ${result.status}\n" +
-                  "You can check the status using the status-check tool with this ID."
-              )
-            )
-        )
+        CallToolResult(content = listOf(TextContent(result)))
       } catch (e: Exception) {
-        CallToolResult(
-          content = listOf(TextContent("Error analyzing repository: ${e.message}")),
-          isError = true,
-        )
-      }
-    }
-
-    server.addTool(
-      name = "github-code-analyzer-status-check",
-      description = "Check status of a previously started repository analysis",
-      inputSchema =
-        Tool.Input(
-          properties =
-            JsonObject(
-              mapOf(
-                "id" to
-                  JsonObject(
-                    mapOf(
-                      "type" to JsonPrimitive("string"),
-                      "description" to JsonPrimitive("Analysis ID to check"),
-                    )
-                  )
-              )
-            ),
-          required = listOf("id"),
-        ),
-    ) { request ->
-      try {
-        val arguments = request.arguments
-        val analysisId =
-          arguments["id"]?.jsonPrimitive?.content
-            ?: throw IllegalArgumentException("Missing analysis ID")
-
-        val status = analysisService.getAnalysisStatus(analysisId)
-
-        val responseContent = StringBuilder()
-        responseContent.append("Analysis ID: ${status.id}\n")
-        responseContent.append("Status: ${status.status}\n")
-
-        if (status.status == "completed") {
-          responseContent.append("\n## Summary\n${status.summary ?: "No summary available"}\n")
-
-          if (!status.insights.isNullOrEmpty()) {
-            responseContent.append("\n## Key Insights\n")
-            status.insights.forEachIndexed { index, insight ->
-              responseContent.append("${index + 1}. $insight\n")
-            }
-          }
-        } else if (status.status == "failed") {
-          responseContent.append("\nError: ${status.summary}")
-        }
-
-        CallToolResult(content = listOf(TextContent(responseContent.toString())))
-      } catch (e: Exception) {
-        CallToolResult(
-          content = listOf(TextContent("Error checking status: ${e.message}")),
-          isError = true,
-        )
+        CallToolResult(content = listOf(TextContent("Error analyzing repository: ${e.message}")), isError = true)
       }
     }
 

@@ -1,3 +1,4 @@
+import mcp.code.analysis.config.AppConfig
 import mcp.code.analysis.server.Server
 import org.slf4j.LoggerFactory
 
@@ -6,16 +7,16 @@ import org.slf4j.LoggerFactory
  *
  * @param args
  * - "--stdio": Runs an MCP server using standard input/output.
- * - "--sse-server-ktor <port>": Runs an SSE MCP server using Ktor plugin (default if no argument is
- *   provided).
+ * - "--sse-server-ktor <port>": Runs an SSE MCP server using Ktor plugin (default if no argument is provided).
  * - "--sse-server <port>": Runs an SSE MCP server with a plain configuration.
  */
 fun main(args: Array<String>) {
   val logger = LoggerFactory.getLogger("Main")
+  val config = AppConfig()
   val server = Server()
 
   val command = args.firstOrNull() ?: "--sse-server-ktor"
-  val port = args.getOrNull(1)?.toIntOrNull() ?: 3001
+  val port = args.getOrNull(1)?.toIntOrNull() ?: config.serverPort
 
   when (command) {
     "--stdio" -> server.runMcpServerUsingStdio()
