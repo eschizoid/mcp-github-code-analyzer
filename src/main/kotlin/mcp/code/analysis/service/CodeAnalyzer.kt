@@ -2,35 +2,60 @@ package mcp.code.analysis.service
 
 import java.io.File
 
-/*
- * This file contains the CodeAnalyzer class, which is responsible for analyzing the structure of a codebase.
- * It identifies files, directories, and their respective metadata such as size, language, imports, and declarations.
+/**
+ * Responsible for analyzing the structure of a codebase. Identifies files, directories, and their respective metadata
+ * such as size, language, imports, and declarations.
  */
 class CodeAnalyzer {
+
+  /**
+   * Analyzes the structure of a codebase.
+   *
+   * @param repoDir The root directory of the repository to analyze
+   * @return A map representing the directory structure and metadata of files
+   */
   fun analyzeStructure(repoDir: File): Map<String, Any> {
     val structure = mutableMapOf<String, Any>()
     val rootPath = repoDir.absolutePath
-
-    // Process directory structure
     processDirectory(repoDir, structure, rootPath)
-
     return structure
+  }
+
+  /**
+   * Collects all code snippets from the repository.
+   *
+   * @param repoDir The root directory of the repository
+   * @return List of code snippets with metadata including file path and language
+   */
+  fun collectAllCodeSnippets(repoDir: File): List<String> {
+    val codeFiles = findCodeFiles(repoDir)
+    return codeFiles.map { file ->
+      val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
+      "File: $relativePath\n```${getLanguageFromExtension(file.extension)}\n${file.readText()}\n```"
+    }
+  }
+
+  /**
+   * Finds the README file in the repository.
+   *
+   * @param repoDir The root directory of the repository
+   * @return The README file if found, or null if not found
+   */
+  fun findReadmeFile(repoDir: File): File? {
+    val readmeNames = listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt")
+    readmeNames.forEach { name ->
+      val file = File(repoDir, name)
+      if (file.exists()) {
+        return file
+      }
+    }
+    return null
   }
 
   private fun processDirectory(dir: File, structure: MutableMap<String, Any>, rootPath: String) {
     // Skip hidden directories and common directories to ignore
     val dirsToIgnore =
-      setOf(
-        ".git",
-        "node_modules",
-        "venv",
-        "__pycache__",
-        "target",
-        "build",
-        "dist",
-        ".idea",
-        ".vscode",
-      )
+      setOf(".git", "node_modules", "venv", "__pycache__", "target", "build", "dist", ".idea", ".vscode")
     if (dir.isHidden || dir.name in dirsToIgnore) {
       return
     }
@@ -149,93 +174,6 @@ class CodeAnalyzer {
     }
   }
 
-  private fun getLanguageFromExtension(extension: String): String =
-    when (extension.lowercase()) {
-      // JVM languages
-      "kt" -> "kotlin"
-      "java" -> "java"
-      "scala" -> "scala"
-      "groovy" -> "groovy"
-      "clj" -> "clojure"
-
-      // Script languages
-      "py" -> "python"
-      "rb" -> "ruby"
-      "js" -> "javascript"
-      "jsx" -> "javascript"
-      "ts" -> "typescript"
-      "tsx" -> "typescript"
-      "php" -> "php"
-      "pl",
-      "pm" -> "perl"
-
-      "sh",
-      "bash" -> "shell"
-
-      "ps1" -> "powershell"
-
-      // Systems programming
-      "c" -> "c"
-      "cpp",
-      "cc",
-      "cxx" -> "cpp"
-
-      "h",
-      "hpp" -> "cpp-header"
-
-      "cs" -> "csharp"
-      "go" -> "go"
-      "rs" -> "rust"
-      "swift" -> "swift"
-      "m" -> "objective-c"
-
-      // Web
-      "html",
-      "htm" -> "html"
-
-      "css" -> "css"
-      "scss",
-      "sass" -> "sass"
-
-      "less" -> "less"
-      "vue" -> "vue"
-      "svelte" -> "svelte"
-
-      // Data formats
-      "json" -> "json"
-      "xml" -> "xml"
-      "yaml",
-      "yml" -> "yaml"
-
-      "toml" -> "toml"
-      "md" -> "markdown"
-      "csv" -> "csv"
-
-      // Configuration
-      "gradle" -> "gradle"
-      "gradle.kts" -> "gradle-kotlin"
-      "properties" -> "properties"
-      "ini" -> "ini"
-      "conf" -> "conf"
-
-      // Other
-      "sql" -> "sql"
-      "r" -> "r"
-      "dart" -> "dart"
-      "lua" -> "lua"
-      "ex",
-      "exs" -> "elixir"
-
-      "erl",
-      "hrl" -> "erlang"
-
-      "hs" -> "haskell"
-      "fs",
-      "fsx" -> "fsharp"
-
-      else -> "text"
-    }
-
   private fun extractImports(content: String, language: String): List<String> =
     when (language) {
       "kotlin" -> {
@@ -263,8 +201,7 @@ class CodeAnalyzer {
 
       "javascript",
       "typescript" -> {
-        val es6ImportRegex =
-          Regex("import\\s+(?:(?:\\{[^}]*\\}|\\w+)\\s+from\\s+)?['\"]([^'\"]+)['\"]")
+        val es6ImportRegex = Regex("import\\s+(?:(?:\\{[^}]*\\}|\\w+)\\s+from\\s+)?['\"]([^'\"]+)['\"]")
         val requireRegex = Regex("(?:const|let|var)\\s+.+\\s*=\\s*require\\(['\"]([^'\"]+)['\"]\\)")
 
         val es6Imports = es6ImportRegex.findAll(content).map { it.groupValues[1] }
@@ -325,8 +262,7 @@ class CodeAnalyzer {
     when (language) {
       "kotlin" -> {
         // Classes, interfaces, objects, and data classes
-        val classRegex =
-          Regex("(?:class|interface|object|enum class|data class)\\s+(\\w+)(?:<[^>]*>)?[^{]*\\{")
+        val classRegex = Regex("(?:class|interface|object|enum class|data class)\\s+(\\w+)(?:<[^>]*>)?[^{]*\\{")
         declarations["classes"] = classRegex.findAll(content).map { it.groupValues[1] }.toList()
 
         // Functions
@@ -334,16 +270,13 @@ class CodeAnalyzer {
           Regex(
             "(?:fun|suspend fun)\\s+(?:<[^>]*>\\s+)?(\\w+)\\s*(?:<[^>]*>)?\\s*\\([^)]*\\)(?:\\s*:\\s*[\\w<>?.,\\s]+)?\\s*(?:\\{|=)"
           )
-        declarations["functions"] =
-          functionRegex.findAll(content).map { it.groupValues[1] }.toList()
+        declarations["functions"] = functionRegex.findAll(content).map { it.groupValues[1] }.toList()
       }
 
       "java" -> {
         // Classes and interfaces
         val classRegex =
-          Regex(
-            "(?:public|private|protected|)\\s*(?:class|interface|enum)\\s+(\\w+)(?:<[^>]*>)?[^{]*\\{"
-          )
+          Regex("(?:public|private|protected|)\\s*(?:class|interface|enum)\\s+(\\w+)(?:<[^>]*>)?[^{]*\\{")
         declarations["classes"] = classRegex.findAll(content).map { it.groupValues[1] }.toList()
 
         // Methods
@@ -361,8 +294,7 @@ class CodeAnalyzer {
 
         // Functions and methods
         val functionRegex = Regex("def\\s+(\\w+)\\s*\\([^)]*\\)\\s*(?:->\\s*[^:]+)?\\s*:")
-        declarations["functions"] =
-          functionRegex.findAll(content).map { it.groupValues[1] }.toList()
+        declarations["functions"] = functionRegex.findAll(content).map { it.groupValues[1] }.toList()
       }
 
       "go" -> {
@@ -372,14 +304,11 @@ class CodeAnalyzer {
 
         // Interfaces
         val interfaceRegex = Regex("type\\s+(\\w+)\\s+interface\\s*\\{")
-        declarations["interfaces"] =
-          interfaceRegex.findAll(content).map { it.groupValues[1] }.toList()
+        declarations["interfaces"] = interfaceRegex.findAll(content).map { it.groupValues[1] }.toList()
 
         // Functions
-        val functionRegex =
-          Regex("func\\s+(?:\\([^)]+\\)\\s+)?(\\w+)\\s*\\([^)]*\\)\\s*(?:\\([^)]*\\))?\\s*\\{")
-        declarations["functions"] =
-          functionRegex.findAll(content).map { it.groupValues[1] }.toList()
+        val functionRegex = Regex("func\\s+(?:\\([^)]+\\)\\s+)?(\\w+)\\s*\\([^)]*\\)\\s*(?:\\([^)]*\\))?\\s*\\{")
+        declarations["functions"] = functionRegex.findAll(content).map { it.groupValues[1] }.toList()
       }
 
       "javascript",
@@ -396,18 +325,14 @@ class CodeAnalyzer {
         declarations["functions"] =
           functionRegex
             .findAll(content)
-            .mapNotNull {
-              it.groupValues[1].ifEmpty { it.groupValues[2].ifEmpty { it.groupValues[3] } }
-            }
+            .mapNotNull { it.groupValues[1].ifEmpty { it.groupValues[2].ifEmpty { it.groupValues[3] } } }
             .filter { it.isNotEmpty() }
             .toList()
 
         // For TypeScript: interfaces and types
         if (language == "typescript") {
-          val interfaceRegex =
-            Regex("interface\\s+(\\w+)(?:<[^>]*>)?\\s*(?:extends\\s+[^{]+)?\\s*\\{")
-          declarations["interfaces"] =
-            interfaceRegex.findAll(content).map { it.groupValues[1] }.toList()
+          val interfaceRegex = Regex("interface\\s+(\\w+)(?:<[^>]*>)?\\s*(?:extends\\s+[^{]+)?\\s*\\{")
+          declarations["interfaces"] = interfaceRegex.findAll(content).map { it.groupValues[1] }.toList()
 
           val typeRegex = Regex("type\\s+(\\w+)(?:<[^>]*>)?\\s*=")
           declarations["types"] = typeRegex.findAll(content).map { it.groupValues[1] }.toList()
@@ -416,17 +341,13 @@ class CodeAnalyzer {
 
       "scala" -> {
         // Classes, objects, and traits
-        val classRegex =
-          Regex("(?:class|object|trait|case class)\\s+(\\w+)(?:\\[[^\\]]*\\])?[^{]*\\{")
+        val classRegex = Regex("(?:class|object|trait|case class)\\s+(\\w+)(?:\\[[^\\]]*\\])?[^{]*\\{")
         declarations["classes"] = classRegex.findAll(content).map { it.groupValues[1] }.toList()
 
         // Methods and functions (including vals/vars with function values)
         val functionRegex =
-          Regex(
-            "(?:def|val|var)\\s+(\\w+)(?:\\[[^\\]]*\\])?\\s*(?:\\([^)]*\\))?(?:\\s*:\\s*[^=]*)?\\s*="
-          )
-        declarations["functions"] =
-          functionRegex.findAll(content).map { it.groupValues[1] }.toList()
+          Regex("(?:def|val|var)\\s+(\\w+)(?:\\[[^\\]]*\\])?\\s*(?:\\([^)]*\\))?(?:\\s*:\\s*[^=]*)?\\s*=")
+        declarations["functions"] = functionRegex.findAll(content).map { it.groupValues[1] }.toList()
       }
 
       "rust" -> {
@@ -439,11 +360,8 @@ class CodeAnalyzer {
 
         // Functions and methods
         val functionRegex =
-          Regex(
-            "(?:pub\\s+)?(?:async\\s+)?fn\\s+(\\w+)(?:<[^>]*>)?\\s*\\([^)]*\\)(?:\\s*->\\s*[^{]+)?\\s*\\{"
-          )
-        declarations["functions"] =
-          functionRegex.findAll(content).map { it.groupValues[1] }.toList()
+          Regex("(?:pub\\s+)?(?:async\\s+)?fn\\s+(\\w+)(?:<[^>]*>)?\\s*\\([^)]*\\)(?:\\s*->\\s*[^{]+)?\\s*\\{")
+        declarations["functions"] = functionRegex.findAll(content).map { it.groupValues[1] }.toList()
 
         // Traits (interfaces)
         val traitRegex = Regex("(?:pub\\s+)?trait\\s+(\\w+)(?:<[^>]*>)?\\s*(?:\\{|:|where)")
@@ -458,20 +376,198 @@ class CodeAnalyzer {
 
         // Functions
         val functionRegex =
-          Regex(
-            "(?:[\\w:]+\\s+)+([\\w~]+)\\s*\\([^)]*\\)(?:\\s*const)?(?:\\s*noexcept)?(?:\\s*override)?\\s*(?:\\{|;)"
-          )
+          Regex("(?:[\\w:]+\\s+)+([\\w~]+)\\s*\\([^)]*\\)(?:\\s*const)?(?:\\s*noexcept)?(?:\\s*override)?\\s*(?:\\{|;)")
         declarations["functions"] =
           functionRegex
             .findAll(content)
             .map { it.groupValues[1] }
-            .filter {
-              it !in setOf("if", "for", "while", "switch", "catch")
-            } // Filter out control structures
+            .filter { it !in setOf("if", "for", "while", "switch", "catch") } // Filter out control structures
             .toList()
       }
     }
 
     return declarations
   }
+
+  private fun findCodeFiles(dir: File): List<File> {
+    val result = mutableListOf<File>()
+    if (dir.isHidden || dir.name == ".git") {
+      return result
+    }
+
+    val files = dir.listFiles() ?: return result
+
+    for (file in files) {
+      if (file.isDirectory) {
+        result.addAll(findCodeFiles(file))
+      } else if (isCodeFile(file)) {
+        result.add(file)
+      }
+    }
+
+    return result
+  }
+
+  private fun isCodeFile(file: File): Boolean {
+    val codeExtensions =
+      setOf(
+        // JVM languages
+        "kt",
+        "java",
+        "scala",
+        "groovy",
+        "clj",
+
+        // Script languages
+        "py",
+        "rb",
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "php",
+        "pl",
+        "pm",
+        "sh",
+        "bash",
+        "ps1",
+
+        // Systems programming
+        "c",
+        "cpp",
+        "cc",
+        "cxx",
+        "h",
+        "hpp",
+        "cs",
+        "go",
+        "rs",
+        "swift",
+        "m",
+
+        // Web
+        "html",
+        "htm",
+        "css",
+        "scss",
+        "sass",
+        "less",
+        "vue",
+        "svelte",
+
+        // Data formats & Config
+        "json",
+        "xml",
+        "yaml",
+        "yml",
+        "toml",
+        "properties",
+        "ini",
+        "conf",
+        "md",
+
+        // Build files
+        "gradle",
+        "gradle.kts",
+        "sbt",
+        "pom",
+        "cmake",
+        "make",
+        "mk",
+
+        // Other languages
+        "sql",
+        "r",
+        "dart",
+        "lua",
+        "ex",
+        "exs",
+        "erl",
+        "hrl",
+        "hs",
+        "fs",
+        "fsx",
+        "jl",
+      )
+    return file.extension.lowercase() in codeExtensions
+  }
+
+  private fun getLanguageFromExtension(extension: String): String =
+    when (extension.lowercase()) {
+      // JVM languages
+      "kt" -> "kotlin"
+      "java" -> "java"
+      "scala" -> "scala"
+      "groovy" -> "groovy"
+      "clj" -> "clojure"
+
+      // Script languages
+      "py" -> "python"
+      "rb" -> "ruby"
+      "js" -> "javascript"
+      "jsx" -> "javascript"
+      "ts" -> "typescript"
+      "tsx" -> "typescript"
+      "php" -> "php"
+      "pl",
+      "pm" -> "perl"
+      "sh",
+      "bash" -> "shell"
+      "ps1" -> "powershell"
+
+      // Systems programming
+      "c" -> "c"
+      "cpp",
+      "cc",
+      "cxx" -> "cpp"
+      "h",
+      "hpp" -> "cpp-header"
+      "cs" -> "csharp"
+      "go" -> "go"
+      "rs" -> "rust"
+      "swift" -> "swift"
+      "m" -> "objective-c"
+
+      // Web
+      "html",
+      "htm" -> "html"
+      "css" -> "css"
+      "scss",
+      "sass" -> "sass"
+      "less" -> "less"
+      "vue" -> "vue"
+      "svelte" -> "svelte"
+
+      // Data formats
+      "json" -> "json"
+      "xml" -> "xml"
+      "yaml",
+      "yml" -> "yaml"
+      "toml" -> "toml"
+      "md" -> "markdown"
+      "csv" -> "csv"
+
+      // Configuration
+      "gradle" -> "gradle"
+      "gradle.kts" -> "gradle-kotlin"
+      "properties" -> "properties"
+      "ini" -> "ini"
+      "conf" -> "conf"
+
+      // Other
+      "sql" -> "sql"
+      "r" -> "r"
+      "dart" -> "dart"
+      "lua" -> "lua"
+      "ex",
+      "exs" -> "elixir"
+      "erl",
+      "hrl" -> "erlang"
+      "hs" -> "haskell"
+      "fs",
+      "fsx" -> "fsharp"
+      "jl" -> "julia"
+
+      else -> "text"
+    }
 }
