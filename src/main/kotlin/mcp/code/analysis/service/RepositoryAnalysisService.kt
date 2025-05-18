@@ -18,11 +18,10 @@ data class RepositoryAnalysisService(
       val repoDir = gitService.cloneRepository(repoUrl, branch)
       val codeStructure = codeAnalyzer.analyzeStructure(repoDir)
       val codeSnippets = codeAnalyzer.collectAllCodeSnippets(repoDir)
-      val readmeFile = codeAnalyzer.findReadmeFile(repoDir)
-      val readmeContent = readmeFile?.readText() ?: "No README found."
       val prompt = modelContextService.buildPrompt(codeSnippets)
       val response = modelContextService.generateResponse(prompt)
       val insights = modelContextService.parseInsights(response)
+      val readmeContent = codeAnalyzer.findReadmeFile(repoDir)
       modelContextService.generateSummary(codeStructure, insights, readmeContent)
     } catch (e: Exception) {
       throw Exception("Error analyzing repository: ${e.message}", e)

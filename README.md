@@ -17,15 +17,30 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
 
 - JDK 23 or higher
 - Kotlin 1.9.x
+- Gradle 8.0 or higher
+- [Ollama](https://github.com/ollama/ollama) 3.2 or higher (for model API)
+- [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (for model context protocol)
 
 ### Installation
 
 1. Clone this repository
 2. Build the project using Gradle:
 
-   ```bash
-   ./gradlew build
-   ```
+  ```bash
+  ./gradlew build
+  ```
+
+3. Start Ollama server:
+
+  ```bash
+  ollama run llama3.2
+  ```
+
+4. Start the MCP Inspector:
+
+  ```bash
+  npx @modelcontextprotocol/inspector
+  ```
 
 ### Configuration
 

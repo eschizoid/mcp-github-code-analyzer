@@ -25,7 +25,7 @@ data class OllamaRequest(
   val options: OllamaOptions = OllamaOptions(),
 )
 
-@Serializable data class OllamaOptions(val temperature: Double = 0.7, val num_predict: Int = 1000)
+@Serializable data class OllamaOptions(val temperature: Double = 0.7, val num_predict: Int = -1)
 
 @Serializable
 data class OllamaResponse(val model: String? = null, val response: String? = null, val done: Boolean = false)
@@ -46,7 +46,7 @@ data class ModelContextService(
    */
   suspend fun generateResponse(prompt: String): String {
     return try {
-      logger.debug("Sending request to Ollama with prompt: ${prompt.take(100)}...")
+      logger.info("Sending request to Ollama with prompt: ${prompt}...")
       val request = OllamaRequest(model = config.modelName, prompt = prompt)
       val ollamaApiUrl = "${config.modelApiUrl}/generate"
       val httpResponse = sendRequest(ollamaApiUrl, request)
@@ -91,24 +91,23 @@ data class ModelContextService(
    */
   fun buildPrompt(codeSnippets: List<String>): String =
     """
-    You are an expert code analyzer with deep knowledge of multiple programming languages including Java, Kotlin, Python, Go, Scala, JavaScript, TypeScript, C++, Rust, Ruby, and more. Analyze the following code repository snippets and provide insights about:
+You are an expert code analyzer with deep knowledge of multiple programming languages including Java, Kotlin, Python, Go, Scala, JavaScript, TypeScript, C++, Rust, Ruby, and more. Analyze the following code repository snippets and provide insights about:
 
-    1. The overall architecture of the application
-    2. Primary programming languages used and their interactions
-    3. Key components and their relationships
-    4. Design patterns used
-    5. Potential code quality issues or improvements
-    6. Security considerations
-    7. Performance considerations
-    8. Language-specific best practices and conventions
+1. The overall architecture of the application
+2. Primary programming languages used and their interactions
+3. Key components and their relationships
+4. Design patterns used
+5. Potential code quality issues or improvements
+6. Security considerations
+7. Performance considerations
+8. Language-specific best practices and conventions
 
-    Code snippets:
+Code snippets:
 
-    ${codeSnippets.joinToString("\n\n")}
+${codeSnippets.joinToString("\n\n")}
 
-    Provide detailed analysis with specific references to the code where possible. Address language-specific concerns and identify cross-language integration points if multiple languages are used.
-    """
-      .trimIndent()
+Provide detailed analysis with specific references to the code where possible. Address language-specific concerns and identify cross-language integration points if multiple languages are used.
+"""
 
   /**
    * Parse the model output to extract insights.
@@ -138,27 +137,26 @@ data class ModelContextService(
     readmeContent: String,
   ): String =
     """
-    You are analyzing a code repository. Based on the following information:
+You are analyzing a code repository. Based on the following information:
 
-    README Content:
-    $readmeContent
+README Content:
+${readmeContent.replace("```","~~~")}
 
-    Code Structure:
-    ${codeStructure.entries.joinToString("\n") { "${it.key}: ${it.value}" }}
+Code Structure:
+${codeStructure.entries.joinToString("\n") { "${it.key}: ${it.value}" }}
 
-    Key Insights:
-    ${insights.joinToString("\n")}
+Key Insights:
+${insights.joinToString("\n")}
 
-    Create a comprehensive summary of this codebase, including:
-    1. Main purpose of the project
-    2. Core architecture and components
-    3. Technologies used
-    4. Key functionality
-    5. Potential areas for improvement
+Create a comprehensive summary of this codebase, including:
+1. Main purpose of the project
+2. Core architecture and components
+3. Technologies used
+4. Key functionality
+5. Potential areas for improvement
 
-    Make a summary with code snippets that can help a new developer to understand this codebase.
-    """
-      .trimIndent()
+Make a summary with code snippets that can help a new developer to understand this codebase.
+"""
 
   companion object {
     /** Creates a default HTTP client with the appropriate configuration. */
