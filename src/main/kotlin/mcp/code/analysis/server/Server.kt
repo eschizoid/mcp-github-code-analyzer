@@ -78,10 +78,10 @@ data class Server(
             val transport = SseServerTransport("/message", this)
             val server: SdkServer = configureServer()
 
-              // For SSE, you can also add prompts/tools/resources if needed:
-              // server.addTool(...), server.addPrompt(...), server.addResource(...)
+            // For SSE, you can also add prompts/tools/resources if needed:
+            // server.addTool(...), server.addPrompt(...), server.addResource(...)
 
-              servers[transport.sessionId] = server
+            servers[transport.sessionId] = server
 
             server.onClose {
               logger.info("Server closed")
@@ -127,7 +127,7 @@ data class Server(
     val server = SdkServer(implementation, serverOptions)
 
     server.addTool(
-      name = "github-code-analyzer-start",
+      name = "analyze-repository",
       description = "Analyzes GitHub repositories to provide code insights and structure summary",
       inputSchema =
         Tool.Input(

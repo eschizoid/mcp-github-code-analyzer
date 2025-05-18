@@ -1,29 +1,29 @@
-# Model Context Protocol Server
+# Model Context Protocol Code Analysis Server
 
-A Kotlin server application that analyzes GitHub repositories to understand code structure and provide insights using AI
-models.
+A Kotlin server application that analyzes GitHub repositories using AI models through the Model Context Protocol (MCP).
 
 ## Features
 
 - Clone and analyze GitHub repositories
 - Extract code structure and relationships
-- Process code using context-aware models
+- Process code using Model Context Protocol
 - Generate detailed insights and summaries
-- RESTful API for repository analysis
+- Functional architecture with immutable data classes
+- Multiple server modes (stdio, SSE)
 
 ## Getting Started
 
 ### Prerequisites
 
-- JDK 11 or higher
+- JDK 23 or higher
 - Kotlin 1.9.x
-- An API key for the model service (optional)
 
 ### Installation
 
 1. Clone this repository
 2. Build the project using Gradle:
-   ```
+
+   ```bash
    ./gradlew build
    ```
 
@@ -31,90 +31,62 @@ models.
 
 The application uses environment variables for configuration:
 
-- `SERVER_PORT`: The port for the server (default: 8080)
+- `SERVER_PORT`: The port for the server (default: 3001)
 - `GITHUB_TOKEN`: GitHub token for API access (optional)
-- `WORKING_DIRECTORY`: Directory for cloning repositories (default: "temp")
-- `MODEL_API_URL`: URL for the model API (default: "http://localhost:11434/v1")
+- `WORKING_DIRECTORY`: Directory for cloning repositories (default: system temp + "/mcp-code-analysis")
+- `MODEL_API_URL`: URL for the model API (default: "http://localhost:11434/api")
 - `MODEL_API_KEY`: API key for the model service (optional)
+- `MODEL_NAME`: Name of the model to use (default: "llama3.2")
 
 ### Running the Application
 
-```
+The server supports multiple modes:
+
+```bash
+# Default: Run as SSE server with Ktor plugin on port 3001
 ./gradlew run
+
+# Run with standard input/output
+./gradlew run --args="--stdio"
+
+# Run as SSE server with Ktor plugin on custom port
+./gradlew run --args="--sse-server-ktor 3002"
+
+# Run as SSE server with plain configuration
+./gradlew run --args="--sse-server 3002"
+
+# With custom environment variables:
+SERVER_PORT=3002 MODEL_NAME=mistral ./gradlew run
 ```
 
-Or with custom configuration:
+## Model Context Protocol
 
-```
-SERVER_PORT=9090 MODEL_API_URL=https://your-model-api.com/v1 ./gradlew run
-```
+This server implements the Model Context Protocol (MCP) and provides the following tool:
 
-## API Usage
+- `analyze-repository` Analyzes GitHub repositories to provide code insights and structure summary.
 
-### Analyze a Repository
+Required parameters:
 
-```
-POST /analyze
-```
+- repoUrl: GitHub repository URL (e.g., https://github.com/owner/repo)
 
-Request body:
+Optional parameters:
 
-```json
-{
-  "repoUrl": "https://github.com/username/repository",
-  "branch": "main",
-  "analysisType": "full"
-}
-```
-
-Analysis types:
-
-- `full`: Analyze all code files
-- `core`: Focus on core components only
-- `basic`: Analyze only key files
-
-Response:
-
-```json
-{
-  "id": "12345-uuid",
-  "status": "pending"
-}
-```
-
-### Check Analysis Status
-
-```
-GET /status/{id}
-```
-
-Response:
-
-```json
-{
-  "id": "12345-uuid",
-  "status": "completed",
-  "summary": "This repository is a Kotlin web application...",
-  "codeStructure": {
-    /* Structure details */
-  },
-  "insights": [
-    "The application uses MVC architecture",
-    "Authentication is implemented using JWT"
-    /* More insights */
-  ]
-}
-```
+- branch: Branch to analyze (default: main)
 
 ## Project Structure
 
-- `src/main/kotlin/Main.kt`: Application entry point
+- `Main.kt`: Application entry point
 - `config/`: Configuration classes
-- `routes/`: API route definitions
+    - `AppConfig.kt`: Immutable configuration data class
+- `server/`: MCP server implementation
+    - `Server.kt`: Functional MCP server with multiple run modes
 - `service/`: Core services for repository analysis
-    - `GitService`: Handles repository cloning
-    - `CodeAnalyzer`: Analyzes code structure
-    - `ModelContextService`: Generates insights using AI models
+    - `GitService.kt`: Handles repository cloning
+    - `CodeAnalyzer.kt`: Analyzes code structure
+    - `ModelContextService.kt`: Generates insights using AI models
+    - `RepositoryAnalysisService.kt`: Coordinates the analysis process
+
+All services are implemented as functional data classes with explicit dependency injection.
 
 ## License
 
