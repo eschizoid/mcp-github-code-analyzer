@@ -12,18 +12,21 @@ import org.slf4j.LoggerFactory
  */
 fun main(args: Array<String>) {
   val logger = LoggerFactory.getLogger("Main")
-  val config = AppConfig()
+  val config = AppConfig.fromEnv()
   val server = Server()
 
-  val command = args.firstOrNull() ?: "--sse-server-ktor"
-  val port = args.getOrNull(1)?.toIntOrNull() ?: config.serverPort
+  val (command, port) = parseArgs(args, config.serverPort)
 
   when (command) {
     "--stdio" -> server.runMcpServerUsingStdio()
     "--sse-server-ktor" -> server.runSseMcpServerUsingKtorPlugin(port)
     "--sse-server" -> server.runSseMcpServerWithPlainConfiguration(port)
-    else -> {
-      logger.error("Unknown command: $command")
-    }
+    else -> logger.error("Unknown command: $command")
   }
+}
+
+private fun parseArgs(args: Array<String>, defaultPort: Int): Pair<String, Int> {
+  val command = args.firstOrNull() ?: "--sse-server-ktor"
+  val port = args.getOrNull(1)?.toIntOrNull() ?: defaultPort
+  return command to port
 }

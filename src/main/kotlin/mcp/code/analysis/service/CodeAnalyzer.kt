@@ -6,20 +6,17 @@ import java.io.File
  * Responsible for analyzing the structure of a codebase. Identifies files, directories, and their respective metadata
  * such as size, language, imports, and declarations.
  */
-class CodeAnalyzer {
-
+data class CodeAnalyzer(
+  val binaryFileSizeThreshold: Long = 1024 * 1024, // 1MB
+  val binaryDetectionThreshold: Double = 0.05,
+) {
   /**
    * Analyzes the structure of a codebase.
    *
    * @param repoDir The root directory of the repository to analyze
    * @return A map representing the directory structure and metadata of files
    */
-  fun analyzeStructure(repoDir: File): Map<String, Any> {
-    val structure = mutableMapOf<String, Any>()
-    val rootPath = repoDir.absolutePath
-    processDirectory(repoDir, structure, rootPath)
-    return structure
-  }
+  fun analyzeStructure(repoDir: File): Map<String, Any> = processDirectory(repoDir, repoDir.absolutePath)
 
   /**
    * Collects all code snippets from the repository.
@@ -27,13 +24,11 @@ class CodeAnalyzer {
    * @param repoDir The root directory of the repository
    * @return List of code snippets with metadata including file path and language
    */
-  fun collectAllCodeSnippets(repoDir: File): List<String> {
-    val codeFiles = findCodeFiles(repoDir)
-    return codeFiles.map { file ->
+  fun collectAllCodeSnippets(repoDir: File): List<String> =
+    findCodeFiles(repoDir).map { file ->
       val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
       "File: $relativePath\n```${getLanguageFromExtension(file.extension)}\n${file.readText()}\n```"
     }
-  }
 
   /**
    * Finds the README file in the repository.
@@ -41,82 +36,69 @@ class CodeAnalyzer {
    * @param repoDir The root directory of the repository
    * @return The README file if found, or null if not found
    */
-  fun findReadmeFile(repoDir: File): File? {
-    val readmeNames = listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt")
-    readmeNames.forEach { name ->
-      val file = File(repoDir, name)
-      if (file.exists()) {
-        return file
-      }
-    }
-    return null
-  }
+  fun findReadmeFile(repoDir: File): File? =
+    listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt")
+      .map { File(repoDir, it) }
+      .firstOrNull { it.exists() }
 
-  private fun processDirectory(dir: File, structure: MutableMap<String, Any>, rootPath: String) {
+  private fun processDirectory(dir: File, rootPath: String): Map<String, Any> {
     // Skip hidden directories and common directories to ignore
     val dirsToIgnore =
       setOf(".git", "node_modules", "venv", "__pycache__", "target", "build", "dist", ".idea", ".vscode")
     if (dir.isHidden || dir.name in dirsToIgnore) {
-      return
+      return emptyMap()
     }
 
-    val files = dir.listFiles() ?: return
+    val files = dir.listFiles() ?: return emptyMap()
 
-    for (file in files) {
+    return files.fold(mutableMapOf()) { structure, file ->
       val relativePath = file.absolutePath.substring(rootPath.length + 1)
 
       if (file.isDirectory) {
-        val dirStructure = mutableMapOf<String, Any>()
-        structure[relativePath] = dirStructure
-        processDirectory(file, dirStructure, rootPath)
+        val dirStructure = processDirectory(file, rootPath)
+        if (dirStructure.isNotEmpty()) {
+          structure[relativePath] = dirStructure
+        }
       } else {
         // For code files, add metadata
-        val metadata = analyzeFile(file)
-        structure[relativePath] = metadata
+        structure[relativePath] = analyzeFile(file)
       }
+      structure
     }
   }
 
   private fun analyzeFile(file: File): Map<String, Any> {
-    val result = mutableMapOf<String, Any>()
+    // Prepare initial metadata
+    val fileSize = file.length()
 
-    result["size"] = file.length()
-    result["extension"] = file.extension
+    // Skip large or binary files early
+    when {
+      fileSize > binaryFileSizeThreshold ->
+        return mapOf("size" to fileSize, "extension" to file.extension, "skipped" to "File too large")
 
-    // Skip files that are too large (e.g., binary files, generated code)
-    if (file.length() > 1024 * 1024) { // Skip files larger than 1MB
-      result["skipped"] = "File too large"
-      return result
+      isBinaryFile(file) -> return mapOf("size" to fileSize, "extension" to file.extension, "skipped" to "Binary file")
     }
 
-    // Skip binary files
-    if (isBinaryFile(file)) {
-      result["skipped"] = "Binary file"
-      return result
-    }
-
-    try {
+    return try {
       val content = file.readText()
-      result["lines"] = content.lines().size
-
       val language = getLanguageFromExtension(file.extension)
-      result["language"] = language
-
-      // Extract language-specific information
-      result["imports"] = extractImports(content, language)
-
-      // Extract classes, functions, methods based on language
+      val imports = extractImports(content, language)
       val declarations = extractDeclarations(content, language)
-      declarations.forEach { (key, value) -> result[key] = value }
-    } catch (e: Exception) {
-      result["error"] = "Failed to analyze: ${e.message}"
-    }
 
-    return result
+      mapOf(
+        "size" to fileSize,
+        "extension" to file.extension,
+        "lines" to content.lines().size,
+        "language" to language,
+        "imports" to imports,
+      ) + declarations
+    } catch (e: Exception) {
+      mapOf("size" to fileSize, "extension" to file.extension, "error" to "Failed to analyze: ${e.message}")
+    }
   }
 
   private fun isBinaryFile(file: File): Boolean {
-    // Check if file is likely binary by looking at the first few bytes
+    // Check if a file is likely a binary by looking at the first few bytes
     val binaryExtensions =
       setOf(
         "class",
@@ -157,22 +139,32 @@ class CodeAnalyzer {
     }
 
     // More thorough check by examining content
-    try {
+    return try {
       val bytes = file.readBytes().take(1000).toByteArray()
-      var nullCount = 0
+      val nullCount = bytes.count { it == 0.toByte() }
 
-      for (byte in bytes) {
-        if (byte == 0.toByte()) {
-          nullCount++
-        }
-      }
-
-      // If more than 5% of the first 1000 bytes are null, likely binary
-      return nullCount > bytes.size * 0.05
+      // If more than the threshold percentage of the first 1000 bytes is null, likely binary
+      nullCount > bytes.size * binaryDetectionThreshold
     } catch (e: Exception) {
-      return false
+      false
     }
   }
+
+  private fun findCodeFiles(dir: File): List<File> =
+    when {
+      dir.isHidden || dir.name == ".git" -> emptyList()
+      !dir.isDirectory -> emptyList()
+      else -> {
+        val files = dir.listFiles() ?: return emptyList()
+        files.flatMap { file ->
+          when {
+            file.isDirectory -> findCodeFiles(file)
+            isCodeFile(file) -> listOf(file)
+            else -> emptyList()
+          }
+        }
+      }
+    }
 
   private fun extractImports(content: String, language: String): List<String> =
     when (language) {
@@ -320,12 +312,12 @@ class CodeAnalyzer {
         // Functions (including arrow functions with explicit names)
         val functionRegex =
           Regex(
-            "(?:function\\s+(\\w+)|(?:const|let|var)\\s+(\\w+)\\s*=\\s*function|(?:const|let|var)\\s+(\\w+)\\s*=\\s*\\([^)]*\\)\\s*=>)"
+            "function\\s+(\\w+)|(?:const|let|var)\\s+(\\w+)\\s*=\\s*function|(?:const|let|var)\\s+(\\w+)\\s*=\\s*\\([^)]*\\)\\s*=>"
           )
         declarations["functions"] =
           functionRegex
             .findAll(content)
-            .mapNotNull { it.groupValues[1].ifEmpty { it.groupValues[2].ifEmpty { it.groupValues[3] } } }
+            .map { it.groupValues[1].ifEmpty { it.groupValues[2].ifEmpty { it.groupValues[3] } } }
             .filter { it.isNotEmpty() }
             .toList()
 
@@ -387,25 +379,6 @@ class CodeAnalyzer {
     }
 
     return declarations
-  }
-
-  private fun findCodeFiles(dir: File): List<File> {
-    val result = mutableListOf<File>()
-    if (dir.isHidden || dir.name == ".git") {
-      return result
-    }
-
-    val files = dir.listFiles() ?: return result
-
-    for (file in files) {
-      if (file.isDirectory) {
-        result.addAll(findCodeFiles(file))
-      } else if (isCodeFile(file)) {
-        result.add(file)
-      }
-    }
-
-    return result
   }
 
   private fun isCodeFile(file: File): Boolean {
@@ -511,8 +484,10 @@ class CodeAnalyzer {
       "php" -> "php"
       "pl",
       "pm" -> "perl"
+
       "sh",
       "bash" -> "shell"
+
       "ps1" -> "powershell"
 
       // Systems programming
@@ -520,8 +495,10 @@ class CodeAnalyzer {
       "cpp",
       "cc",
       "cxx" -> "cpp"
+
       "h",
       "hpp" -> "cpp-header"
+
       "cs" -> "csharp"
       "go" -> "go"
       "rs" -> "rust"
@@ -531,9 +508,11 @@ class CodeAnalyzer {
       // Web
       "html",
       "htm" -> "html"
+
       "css" -> "css"
       "scss",
       "sass" -> "sass"
+
       "less" -> "less"
       "vue" -> "vue"
       "svelte" -> "svelte"
@@ -543,6 +522,7 @@ class CodeAnalyzer {
       "xml" -> "xml"
       "yaml",
       "yml" -> "yaml"
+
       "toml" -> "toml"
       "md" -> "markdown"
       "csv" -> "csv"
@@ -561,11 +541,14 @@ class CodeAnalyzer {
       "lua" -> "lua"
       "ex",
       "exs" -> "elixir"
+
       "erl",
       "hrl" -> "erlang"
+
       "hs" -> "haskell"
       "fs",
       "fsx" -> "fsharp"
+
       "jl" -> "julia"
 
       else -> "text"
