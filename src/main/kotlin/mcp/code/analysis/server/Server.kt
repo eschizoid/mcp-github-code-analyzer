@@ -20,26 +20,31 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import mcp.code.analysis.service.RepositoryAnalysisService
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 /**
  * Server for analyzing GitHub repositories using the Model Context Protocol (MCP). Provides functionalities for
  * analyzing GitHub repositories and checking analysis status.
  */
-class Server {
+data class Server(
+  private val repositoryAnalysisService: RepositoryAnalysisService = RepositoryAnalysisService(),
+  private val logger: Logger = LoggerFactory.getLogger(Server::class.java),
+  private val implementation: Implementation =
+    Implementation(name = "MCP GitHub Code Analysis Server", version = "0.1.0"),
+  private val serverOptions: ServerOptions =
+    ServerOptions(
+      capabilities =
+        ServerCapabilities(
+          prompts = ServerCapabilities.Prompts(listChanged = true),
+          resources = ServerCapabilities.Resources(subscribe = true, listChanged = true),
+          tools = ServerCapabilities.Tools(listChanged = true),
+        )
+    ),
+) {
 
-  private val logger = LoggerFactory.getLogger(this::class.java)
-  private val analysisService = RepositoryAnalysisService()
-
-  /**
-   * Starts an MCP server using standard input/output (stdio) for communication.
-   *
-   * This method configures the server and connects it to the standard input and output streams. It will handle listing
-   * prompts, tools, and resources automatically.
-   */
+  /** Starts an MCP server using standard input/output (stdio) for communication. */
   fun runMcpServerUsingStdio() {
-    // Note: The server will handle listing prompts, tools, and resources automatically.
-    // The handleListResourceTemplates will return empty as defined in the Server code.
     val server = configureServer()
     val transport =
       StdioServerTransport(
@@ -63,7 +68,7 @@ class Server {
    */
   fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
     val servers = ConcurrentMap<String, SdkServer>()
-    logger.info("Starting sse server on port $port. ")
+    logger.info("Starting SSE server on port $port.")
     logger.info("Use inspector to connect to the http://localhost:$port/sse")
 
     embeddedServer(CIO, host = "0.0.0.0", port = port) {
@@ -73,10 +78,10 @@ class Server {
             val transport = SseServerTransport("/message", this)
             val server: SdkServer = configureServer()
 
-            // For SSE, you can also add prompts/tools/resources if needed:
-            // server.addTool(...), server.addPrompt(...), server.addResource(...)
+              // For SSE, you can also add prompts/tools/resources if needed:
+              // server.addTool(...), server.addPrompt(...), server.addResource(...)
 
-            servers[transport.sessionId] = server
+              servers[transport.sessionId] = server
 
             server.onClose {
               logger.info("Server closed")
@@ -107,15 +112,10 @@ class Server {
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
   fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
-    logger.info("Starting sse server on port $port")
-    logger.info("Use inspector to connect to the http://localhost:$port/sse")
+    logger.info("Starting SSE server on port $port")
+    logger.info("Use inspector to connect to http://localhost:$port/sse")
 
-    embeddedServer(CIO, host = "0.0.0.0", port = port) {
-        mcp {
-          return@mcp configureServer()
-        }
-      }
-      .start(wait = true)
+    embeddedServer(CIO, host = "0.0.0.0", port = port) { mcp { configureServer() } }.start(wait = true)
   }
 
   /**
@@ -124,18 +124,7 @@ class Server {
    * @return The configured MCP server instance.
    */
   private fun configureServer(): SdkServer {
-    val server =
-      SdkServer(
-        Implementation(name = "MCP GitHub Code Analysis Server", version = "0.1.0"),
-        ServerOptions(
-          capabilities =
-            ServerCapabilities(
-              prompts = ServerCapabilities.Prompts(listChanged = true),
-              resources = ServerCapabilities.Resources(subscribe = true, listChanged = true),
-              tools = ServerCapabilities.Tools(listChanged = true),
-            )
-        ),
-      )
+    val server = SdkServer(implementation, serverOptions)
 
     server.addTool(
       name = "github-code-analyzer-start",
@@ -156,7 +145,7 @@ class Server {
                   JsonObject(
                     mapOf(
                       "type" to JsonPrimitive("string"),
-                      "description" to JsonPrimitive("Branch to analyze (default: mcp.code.analysis.server.main)"),
+                      "description" to JsonPrimitive("Branch to analyze (default: main)"),
                     )
                   ),
               )
@@ -169,14 +158,12 @@ class Server {
         val repoUrl =
           arguments["repoUrl"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Missing repoUrl parameter")
         val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
-        val result = analysisService.analyzeRepository(repoUrl, branch)
-
+        val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
         CallToolResult(content = listOf(TextContent(result)))
       } catch (e: Exception) {
         CallToolResult(content = listOf(TextContent("Error analyzing repository: ${e.message}")), isError = true)
       }
     }
-
     return server
   }
 }
