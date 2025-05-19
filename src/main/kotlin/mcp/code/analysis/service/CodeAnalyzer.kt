@@ -1,14 +1,17 @@
 package mcp.code.analysis.service
 
 import java.io.File
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 /**
  * Responsible for analyzing the structure of a codebase. Identifies files, directories, and their respective metadata
  * such as size, language, imports, and declarations.
  */
 data class CodeAnalyzer(
-  val binaryFileSizeThreshold: Long = 1024 * 1024, // 1MB
-  val binaryDetectionThreshold: Double = 0.05,
+  private val binaryFileSizeThreshold: Long = 1024 * 1024, // 1MB
+  private val binaryDetectionThreshold: Double = 0.05,
+  private val logger: Logger = LoggerFactory.getLogger(ModelContextService::class.java),
 ) {
   /**
    * Analyzes the structure of a codebase.
@@ -25,10 +28,22 @@ data class CodeAnalyzer(
    * @return List of code snippets with metadata including file path and language
    */
   fun collectAllCodeSnippets(repoDir: File): List<String> =
-    findCodeFiles(repoDir).map { file ->
-      val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
-      "File: $relativePath\n```${getLanguageFromExtension(file.extension)}\n${file.readText()}\n```"
-    }
+    findCodeFiles(repoDir)
+      .filter { file ->
+        file.extension.lowercase() in setOf("kt", "java", "scala", "py", "rb", "js", "ts", "go", "c", "cpp", "rust") &&
+          !file.absolutePath.contains("test", ignoreCase = true)
+      }
+      .map { file ->
+        val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
+        val lang = getLanguageFromExtension(file.extension)
+        val safeContent = file.readLines().joinToString("\n")
+        "---\n --- File: $relativePath\n~~~$lang\n$safeContent\n~~~"
+      }
+      .toList()
+      .also { snippets ->
+        logger.info("Collected ${snippets.size} code snippets from ${repoDir.absolutePath}")
+        logger.info("Snippets Found:\n${snippets.joinToString("\n")}")
+      }
 
   /**
    * Finds the README file in the repository.
@@ -36,18 +51,28 @@ data class CodeAnalyzer(
    * @param repoDir The root directory of the repository
    * @return The README file if found, or null if not found
    */
-  fun findReadmeFile(repoDir: File): File? =
-    listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt")
-      .map { File(repoDir, it) }
-      .firstOrNull { it.exists() }
+  fun findReadmeFile(repoDir: File): String {
+    val readmeFile =
+      listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt")
+        .map { File(repoDir, it) }
+        .firstOrNull { it.exists() }
+
+    return if (readmeFile != null) {
+      val content = readmeFile.readText()
+      logger.info("Readme file content: $content")
+      logger.info("Readme file found: ${readmeFile.absolutePath}")
+      content
+    } else {
+      logger.info("No readme file found in ${repoDir.absolutePath}")
+      "No README content available."
+    }
+  }
 
   private fun processDirectory(dir: File, rootPath: String): Map<String, Any> {
     // Skip hidden directories and common directories to ignore
     val dirsToIgnore =
       setOf(".git", "node_modules", "venv", "__pycache__", "target", "build", "dist", ".idea", ".vscode")
-    if (dir.isHidden || dir.name in dirsToIgnore) {
-      return emptyMap()
-    }
+    if (dir.isHidden || dir.name in dirsToIgnore) return emptyMap()
 
     val files = dir.listFiles() ?: return emptyMap()
 
@@ -56,9 +81,7 @@ data class CodeAnalyzer(
 
       if (file.isDirectory) {
         val dirStructure = processDirectory(file, rootPath)
-        if (dirStructure.isNotEmpty()) {
-          structure[relativePath] = dirStructure
-        }
+        if (dirStructure.isNotEmpty()) structure[relativePath] = dirStructure
       } else {
         // For code files, add metadata
         structure[relativePath] = analyzeFile(file)
@@ -134,9 +157,7 @@ data class CodeAnalyzer(
       )
 
     // Quick check based on extension
-    if (file.extension.lowercase() in binaryExtensions) {
-      return true
-    }
+    if (file.extension.lowercase() in binaryExtensions) return true
 
     // More thorough check by examining content
     return try {
@@ -238,11 +259,7 @@ data class CodeAnalyzer(
         val namespace = namespaceRegex.find(content)?.groupValues?.get(1)
         val uses = useRegex.findAll(content).map { it.groupValues[1] }.toList()
 
-        if (namespace != null) {
-          listOf(namespace) + uses
-        } else {
-          uses
-        }
+        if (namespace != null) listOf(namespace) + uses else uses
       }
 
       else -> emptyList()

@@ -15,8 +15,7 @@ data class GitService(private val config: AppConfig = AppConfig.fromEnv()) {
    * @return The path to the cloned repository.
    */
   fun cloneRepository(repoUrl: String, branch: String): File {
-    val workDir = File(config.workingDirectory)
-    if (!workDir.exists()) workDir.mkdirs()
+    val workDir = File(config.cloneDirectory)
     val repoName = extractRepoName(repoUrl)
     val targetDir = Files.createTempDirectory(workDir.toPath(), repoName).toFile()
     Git.cloneRepository().setURI(repoUrl).setDirectory(targetDir).setBranch(branch).call().use { git ->

@@ -7,7 +7,8 @@ package mcp.code.analysis.config
 data class AppConfig(
   val serverPort: Int,
   val githubToken: String,
-  val workingDirectory: String,
+  val cloneDirectory: String,
+  val logDirectory: String,
   val modelApiUrl: String,
   val modelApiKey: String,
   val modelName: String,
@@ -24,8 +25,8 @@ data class AppConfig(
       AppConfig(
         serverPort = System.getenv("SERVER_PORT")?.toIntOrNull() ?: 3001,
         githubToken = System.getenv("GITHUB_TOKEN") ?: "",
-        workingDirectory =
-          System.getenv("WORKING_DIRECTORY") ?: System.getProperty("java.io.tmpdir").plus("/mcp-code-analysis"),
+        cloneDirectory = System.getenv("CLONE_DIRECTORY") ?: "/tmp/mcp-github-code-analyzer/clones",
+        logDirectory = System.getenv("LOGS_DIRECTORY") ?: "/tmp/mcp-github-code-analyzer/logs",
         modelApiUrl = System.getenv("MODEL_API_URL") ?: "http://localhost:11434/api",
         modelApiKey = System.getenv("MODEL_API_KEY") ?: "",
         modelName = System.getenv("MODEL_NAME") ?: "llama3.2",
