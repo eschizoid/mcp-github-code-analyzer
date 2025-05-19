@@ -26,11 +26,13 @@ version = rootProject.scmVersion.version
 description = "MCP Server for GitHub Code Repositories Analysis"
 
 dependencies {
+  val ktorVersion = "3.1.3"
+  val coroutinesVersion = "1.10.2"
+
   // Kotlin standard library
   implementation(kotlin("stdlib"))
 
   // Ktor server
-  val ktorVersion = "3.1.3"
   implementation("io.ktor:ktor-client-cio:$ktorVersion")
   implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
   implementation("io.ktor:ktor-client-core:$ktorVersion")
@@ -60,6 +62,7 @@ dependencies {
   testImplementation(kotlin("test"))
   testImplementation("io.mockk:mockk:1.14.2")
   testImplementation("io.ktor:ktor-client-mock-jvm:$ktorVersion")
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion")
 }
 
 application { mainClass.set("MainKt") }
@@ -75,6 +78,14 @@ tasks.jar {
 }
 
 tasks.test { useJUnitPlatform() }
+
+tasks.jacocoTestReport {
+  reports {
+    csv.required.set(true)
+    xml.required.set(true)
+    html.required.set(true)
+  }
+}
 
 java {
   withSourcesJar()
