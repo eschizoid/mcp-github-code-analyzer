@@ -1,4 +1,4 @@
-# Model Context Protocol Code Analysis Server
+# 🤖 Model Context Protocol Code Analysis Server
 
 A Kotlin server application that analyzes GitHub repositories using AI models through the Model Context Protocol (MCP).
 
@@ -8,7 +8,6 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
 - Extract code structure and relationships
 - Process code using Model Context Protocol
 - Generate detailed insights and summaries
-- Functional architecture with immutable data classes
 - Multiple server modes (stdio, SSE)
 
 ## Getting Started
@@ -17,7 +16,7 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
 
 - JDK 23 or higher
 - Kotlin 1.9.x
-- Gradle 8.0 or higher
+- Gradle 8.14 or higher
 - [Ollama](https://github.com/ollama/ollama) 3.2 or higher (for model API)
 - [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (for model context protocol)
 
@@ -41,6 +40,27 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
   ```bash
   npx @modelcontextprotocol/inspector
   ```
+
+5. You can access the MCP Inspector at `http://127.0.0.1:6274/` and configure the `Arguments` to start the server:
+
+![Connect](https://raw.githubusercontent.com/eschizo/mcp-github-code-analyzer/main/img/mcp_connect_server.png)
+
+Use the following arguments:
+
+  ```bash
+  ~/mcp-github-code-analyzer/build/libs/mcp-github-code-analyzer-0.1.0-SNAPSHOT.jar --stdio
+  ```
+
+6. Click `Connect` to start the MCP Server.
+
+7. Then you can click the tab `Tools` to discover the available tools. The Tool `analyze-repository` should be listed
+   and ready to be used. Click on the `analyze-repository` tool to see its details and parameters:
+
+![Tools Tab](https://raw.githubusercontent.com/eschizo/mcp-github-code-analyzer/main/img/mcp_tools_tab.png)
+
+8. Finally, capture the `repoUrl` and `branch` parameters and click `Run Tool` to start the analysis:
+
+![Run Tool](https://raw.githubusercontent.com/eschizo/mcp-github-code-analyzer/main/img/mcp_inspector_run_tool.png)
 
 ### Configuration
 
@@ -82,11 +102,11 @@ This server implements the Model Context Protocol (MCP) and provides the followi
 
 Required parameters:
 
-- repoUrl: GitHub repository URL (e.g., https://github.com/owner/repo)
+- `repoUrl`: GitHub repository URL (e.g., https://github.com/owner/repo)
 
 Optional parameters:
 
-- branch: Branch to analyze (default: main)
+- `branch`: Branch to analyze (default: main)
 
 ## Project Structure
 
