@@ -3,16 +3,15 @@ package mcp.code.analysis.service
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.plugins.timeout
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
 import mcp.code.analysis.config.AppConfig
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -46,7 +45,11 @@ data class ModelContextService(
    */
   suspend fun generateResponse(prompt: String): String {
     return try {
-      logger.info("Sending request to Ollama with prompt: ${prompt}...")
+      logger.info(
+        """Sending request to Ollama with prompt:
+          |${prompt}..."""
+          .trimIndent()
+      )
       val request = OllamaRequest(model = config.modelName, prompt = prompt)
       val ollamaApiUrl = "${config.modelApiUrl}/generate"
       val httpResponse = sendRequest(ollamaApiUrl, request)
@@ -57,6 +60,11 @@ data class ModelContextService(
         "API error (${httpResponse.status}): $errorBody"
       } else {
         val response = httpResponse.body<OllamaResponse>()
+        logger.info(
+          """Received response from Ollama:
+            |${response.response}"""
+            .trimIndent()
+        )
         response.response ?: "No response generated"
       }
     } catch (e: Exception) {
@@ -66,58 +74,68 @@ data class ModelContextService(
   }
 
   /**
-   * Generate a summary of the codebase based on the provided information.
+   * Build a prompt for the model context based on the provided README file.
    *
-   * @param codeStructure Map representing the structure of the codebase
-   * @param insights List of insights extracted from code analysis
-   * @param readmeContent Content of the README file from the repository
-   * @return A comprehensive summary of the codebase
-   */
-  suspend fun generateSummary(codeStructure: Map<String, Any>, insights: List<String>, readmeContent: String): String {
-    return try {
-      val prompt = buildSummaryPrompt(codeStructure, insights, readmeContent)
-      generateResponse(prompt)
-    } catch (e: Exception) {
-      logger.error("Error generating summary: ${e.message}", e)
-      "Error generating summary: ${e.message}"
-    }
-  }
-
-  /**
-   * Build a prompt for the model context based on the provided code snippets.
-   *
-   * @param codeSnippets List of code snippets from the repository to analyze
+   * @param readme List of code snippets from the repository to analyze
    * @return A structured prompt for the model
    */
-  fun buildPrompt(codeSnippets: List<String>): String =
+  fun buildInsightsPrompt(readme: String) =
     """
-You are an expert code analyzer with deep knowledge of multiple programming languages including Java, Kotlin, Python, Go, Scala, JavaScript, TypeScript, C++, Rust, Ruby, and more. Analyze the following code repository snippets and provide insights about:
-
-1. The overall architecture of the application
-2. Primary programming languages used and their interactions
-3. Key components and their relationships
-4. Design patterns used
-5. Potential code quality issues or improvements
-6. Security considerations
-7. Performance considerations
-8. Language-specific best practices and conventions
-
-Code snippets:
-
-${codeSnippets.joinToString("\n\n")}
-
-Provide detailed analysis with specific references to the code where possible. Address language-specific concerns and identify cross-language integration points if multiple languages are used.
-"""
+    |You are an expert codebase analyst with deep knowledge of software architecture, secure and scalable design, and programming languages including Java, Kotlin, Python, Go, Scala, JavaScript, TypeScript, C++, Rust, Ruby, and more.
+    |
+    |You are given the README file of a repository. Analyze it thoroughly and provide a detailed breakdown addressing the following aspects **based on the README content alone**:
+    |
+    |1. **Overall architecture** of the application (inferred from descriptions, diagrams, or setup instructions)
+    |2. **Primary programming languages** used and how they may interact
+    |3. **Key components** and their relationships or dependencies
+    |4. **Design patterns** mentioned or implied
+    |5. **Potential code quality issues** or areas for improvement (based on tooling, structure, or conventions described)
+    |6. **Security considerations** (e.g., exposed credentials, missing practices)
+    |7. **Performance considerations** (e.g., use of caching, parallelism hints)
+    |8. **Language-specific best practices and conventions**
+    |
+    |If any of the above are not directly stated, make well-reasoned inferences and clearly label them as such.
+    |
+    |Format your response using sections and markdown. Provide specific references to the README text where applicable. If multiple languages are used, highlight any cross-language integration points.
+    |
+    |README Content:
+    |~~~markdown
+    |${readme.replace("```","~~~")}
+    |~~~"""
+      .trimIndent()
 
   /**
-   * Parse the model output to extract insights.
+   * Build a summary prompt for the model context based on the provided code structure and snippets.
    *
-   * @param modelOutput The raw output from the model
-   * @return List of extracted insights
+   * @param codeStructure Map representing the structure of the codebase
+   * @param codeSnippets List of code snippets from the repository
+   * @param insights List of insights generated from the README analysis
+   * @return A structured prompt for the model
    */
-  fun parseInsights(modelOutput: String): List<String> {
-    return modelOutput.split(Regex("\\n\\s*\\d+\\.\\s+|\\n\\s*-\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
-  }
+  fun buildSummaryPrompt(codeStructure: Map<String, Any>, codeSnippets: List<String>, insights: String): String =
+    """
+    |You are analyzing a software code repository. You are provided with:
+    |
+    |Code Snippets:
+    |${codeSnippets.joinToString("\n\n")}
+    |
+    |Key Insights:
+    |$insights
+    |
+    |Using this information, generate a comprehensive yet accessible summary of the codebase. Your goal is to help a new developer quickly understand the project.
+    |
+    |Your summary should include:
+    |
+    |1. **Main purpose** of the project
+    |2. **Core architecture and components**
+    |3. **Technologies and languages** used
+    |4. **Key functionality and workflows**
+    |5. **Potential areas for improvement or refactoring**
+    |
+    |Where helpful, include **small illustrative code snippets** from the provided examples to clarify important concepts, structures, or patterns.
+    |
+    |Format your response with clear section headings and concise explanations. Assume the reader is technically proficient but unfamiliar with this specific codebase."""
+      .trimIndent()
 
   private suspend fun sendRequest(url: String, request: OllamaRequest): HttpResponse {
     return httpClient.post(url) {
@@ -130,33 +148,6 @@ Provide detailed analysis with specific references to the code where possible. A
       }
     }
   }
-
-  private fun buildSummaryPrompt(
-    codeStructure: Map<String, Any>,
-    insights: List<String>,
-    readmeContent: String,
-  ): String =
-    """
-You are analyzing a code repository. Based on the following information:
-
-README Content:
-${readmeContent.replace("```","~~~")}
-
-Code Structure:
-${codeStructure.entries.joinToString("\n") { "${it.key}: ${it.value}" }}
-
-Key Insights:
-${insights.joinToString("\n")}
-
-Create a comprehensive summary of this codebase, including:
-1. Main purpose of the project
-2. Core architecture and components
-3. Technologies used
-4. Key functionality
-5. Potential areas for improvement
-
-Make a summary with code snippets that can help a new developer to understand this codebase.
-"""
 
   companion object {
     /** Creates a default HTTP client with the appropriate configuration. */

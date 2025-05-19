@@ -16,13 +16,16 @@ data class RepositoryAnalysisService(
   suspend fun analyzeRepository(repoUrl: String, branch: String): String {
     return try {
       val repoDir = gitService.cloneRepository(repoUrl, branch)
+
+      val readmeContent = codeAnalyzer.findReadmeFile(repoDir)
       val codeStructure = codeAnalyzer.analyzeStructure(repoDir)
       val codeSnippets = codeAnalyzer.collectAllCodeSnippets(repoDir)
-      val prompt = modelContextService.buildPrompt(codeSnippets)
-      val response = modelContextService.generateResponse(prompt)
-      val insights = modelContextService.parseInsights(response)
-      val readmeContent = codeAnalyzer.findReadmeFile(repoDir)
-      modelContextService.generateSummary(codeStructure, insights, readmeContent)
+
+      val insightsPrompt = modelContextService.buildInsightsPrompt(readmeContent)
+      val insightsResponse = modelContextService.generateResponse(insightsPrompt)
+
+      val summaryPrompt = modelContextService.buildSummaryPrompt(codeStructure, codeSnippets, insightsResponse)
+      modelContextService.generateResponse(summaryPrompt)
     } catch (e: Exception) {
       throw Exception("Error analyzing repository: ${e.message}", e)
     }

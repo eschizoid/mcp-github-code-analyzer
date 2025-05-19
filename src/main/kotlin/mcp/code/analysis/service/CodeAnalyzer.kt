@@ -37,12 +37,12 @@ data class CodeAnalyzer(
         val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
         val lang = getLanguageFromExtension(file.extension)
         val safeContent = file.readLines().joinToString("\n")
-        "---\n --- File: $relativePath\n~~~$lang\n$safeContent\n~~~"
+        "---\nFile: $relativePath\n~~~$lang\n$safeContent\n~~~"
       }
       .toList()
       .also { snippets ->
         logger.info("Collected ${snippets.size} code snippets from ${repoDir.absolutePath}")
-        logger.info("Snippets Found:\n${snippets.joinToString("\n")}")
+        logger.debug("Snippets Found:\n${snippets.joinToString("\n")}")
       }
 
   /**
@@ -59,11 +59,11 @@ data class CodeAnalyzer(
 
     return if (readmeFile != null) {
       val content = readmeFile.readText()
-      logger.info("Readme file content: $content")
       logger.info("Readme file found: ${readmeFile.absolutePath}")
+      logger.debug("Readme file content: $content")
       content
     } else {
-      logger.info("No readme file found in ${repoDir.absolutePath}")
+      logger.warn("No readme file found in ${repoDir.absolutePath}")
       "No README content available."
     }
   }
@@ -72,22 +72,25 @@ data class CodeAnalyzer(
     // Skip hidden directories and common directories to ignore
     val dirsToIgnore =
       setOf(".git", "node_modules", "venv", "__pycache__", "target", "build", "dist", ".idea", ".vscode")
+
     if (dir.isHidden || dir.name in dirsToIgnore) return emptyMap()
+    val files = dir.listFiles()?.toList() ?: return emptyMap()
+    val fileEntries = files.filterNot(File::isDirectory).associate { file -> file.name to analyzeFile(file) }
 
-    val files = dir.listFiles() ?: return emptyMap()
+    val directoryEntries =
+      files
+        .filter(File::isDirectory)
+        .flatMap { subDir ->
+          val dirStructure = processDirectory(subDir, rootPath)
+          if (dirStructure.isEmpty()) emptyList()
+          else {
+            val relativePath = subDir.absolutePath.substring(rootPath.length + 1)
+            listOf(relativePath to dirStructure)
+          }
+        }
+        .toMap()
 
-    return files.fold(mutableMapOf()) { structure, file ->
-      val relativePath = file.absolutePath.substring(rootPath.length + 1)
-
-      if (file.isDirectory) {
-        val dirStructure = processDirectory(file, rootPath)
-        if (dirStructure.isNotEmpty()) structure[relativePath] = dirStructure
-      } else {
-        // For code files, add metadata
-        structure[relativePath] = analyzeFile(file)
-      }
-      structure
-    }
+    return fileEntries + directoryEntries
   }
 
   private fun analyzeFile(file: File): Map<String, Any> {
@@ -166,7 +169,7 @@ data class CodeAnalyzer(
 
       // If more than the threshold percentage of the first 1000 bytes is null, likely binary
       nullCount > bytes.size * binaryDetectionThreshold
-    } catch (e: Exception) {
+    } catch (_: Exception) {
       false
     }
   }
