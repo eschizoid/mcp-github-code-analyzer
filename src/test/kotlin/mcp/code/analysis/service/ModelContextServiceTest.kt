@@ -20,6 +20,31 @@ class ModelContextServiceTest {
   private lateinit var mockHttpClient: HttpClient
   private lateinit var service: ModelContextService
 
+  // Test cases for buildInsightsPrompt function
+  data class InsightsPromptTestCase(
+    val name: String,
+    val readmeContent: String,
+    val expectedContains: List<String>,
+    val shouldNotContain: List<String> = listOf(),
+  )
+
+  // Test cases for generateResponse function
+  data class ResponseTestCase(
+    val name: String,
+    val prompt: String,
+    val mockResponse: String,
+    val expectedResult: String,
+  )
+
+  // Test cases for generateSummary function
+  data class SummaryTestCase(
+    val name: String,
+    val codeStructure: Map<String, Any>,
+    val codeSnippets: List<String>,
+    val insights: String,
+    val expectedPromptContains: List<String>,
+  )
+
   @BeforeEach
   fun setUp() {
     logger = mockk(relaxed = true)
@@ -57,14 +82,6 @@ class ModelContextServiceTest {
 
     service = ModelContextService(config = config, httpClient = mockHttpClient, logger = logger)
   }
-
-  // Test cases for buildInsightsPrompt function
-  data class InsightsPromptTestCase(
-    val name: String,
-    val readmeContent: String,
-    val expectedContains: List<String>,
-    val shouldNotContain: List<String> = listOf(),
-  )
 
   @Test
   fun `test buildInsightsPrompt formats README correctly`() {
@@ -133,22 +150,6 @@ class ModelContextServiceTest {
     }
   }
 
-  // Test cases for parseInsights function
-  data class InsightParsingTestCase(
-    val name: String,
-    val input: String,
-    val expectedCount: Int,
-    val expectedContains: List<String>,
-  )
-
-  // Test cases for generateResponse function
-  data class ResponseTestCase(
-    val name: String,
-    val prompt: String,
-    val mockResponse: String,
-    val expectedResult: String,
-  )
-
   @Test
   fun `test generateResponse returns model response`() = runBlocking {
     val testCases =
@@ -202,15 +203,6 @@ class ModelContextServiceTest {
       assertEquals(testCase.expectedResult, response, "Test case '${testCase.name}' should return expected response")
     }
   }
-
-  // Test cases for generateSummary function
-  data class SummaryTestCase(
-    val name: String,
-    val codeStructure: Map<String, Any>,
-    val codeSnippets: List<String>,
-    val insights: String,
-    val expectedPromptContains: List<String>,
-  )
 
   @Test
   fun `test generateSummary builds combined prompt with code and insights`() = runBlocking {
