@@ -1,4 +1,4 @@
-# 🤖 Model Context Protocol Code Analysis Server
+# 🤖 MCP Code Analysis Server
 
 A Kotlin server application that analyzes GitHub repositories using AI models through the Model Context Protocol (MCP).
 
@@ -43,7 +43,7 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
 
 5. You can access the MCP Inspector at `http://127.0.0.1:6274/` and configure the `Arguments` to start the server:
 
-![Connect](https://raw.githubusercontent.com/eschizo/mcp-github-code-analyzer/main/img/mcp_connect_server.png)
+![Connect](https://raw.githubusercontent.com/eschizoid/mcp-github-code-analyzer/main/img/mcp_inspector_connect_server.png)
 
 Use the following arguments:
 
@@ -56,11 +56,11 @@ Use the following arguments:
 7. Then you can click the tab `Tools` to discover the available tools. The Tool `analyze-repository` should be listed
    and ready to be used. Click on the `analyze-repository` tool to see its details and parameters:
 
-![Tools Tab](https://raw.githubusercontent.com/eschizo/mcp-github-code-analyzer/main/img/mcp_tools_tab.png)
+![Tools Tab](https://raw.githubusercontent.com/eschizoid/mcp-github-code-analyzer/main/img/mcp_inspector_tools_tab.png)
 
 8. Finally, capture the `repoUrl` and `branch` parameters and click `Run Tool` to start the analysis:
 
-![Run Tool](https://raw.githubusercontent.com/eschizo/mcp-github-code-analyzer/main/img/mcp_inspector_run_tool.png)
+![Run Tool](https://raw.githubusercontent.com/eschizoid/mcp-github-code-analyzer/main/img/mcp_inspector_run_tool.png)
 
 ### Configuration
 
