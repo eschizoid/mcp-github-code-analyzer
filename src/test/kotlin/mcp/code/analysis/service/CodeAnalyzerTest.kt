@@ -20,12 +20,18 @@ class CodeAnalyzerTest {
     analyzer = CodeAnalyzer(logger = logger)
   }
 
-  // Test cases for findReadmeFile function
   data class ReadmeTestCase(
     val name: String,
     val files: Map<String, String>,
     val expectedContent: String,
     val containsLogMessage: String,
+  )
+
+  data class SnippetsTestCase(
+    val name: String,
+    val files: Map<String, String>,
+    val expectedSnippetCount: Int,
+    val shouldContainFiles: List<String>,
   )
 
   @Test
@@ -87,20 +93,33 @@ class CodeAnalyzerTest {
     }
   }
 
-  // Test cases for analyzeStructure function
   @Test
   fun `test analyzeStructure with different directory structures`() {
     // Arrange
     val subDir = File(tempDir, "src").apply { mkdir() }
     File(subDir, "Helper.java").apply { writeText("public class Helper { public void help() {} }") }
-    File(tempDir, "main.kt").apply { writeText("""fun main() { println("Hello") }""") }
+    File(tempDir, "main.kt").apply { writeText("""fun main() { println("Hello from Kotlin") }""") }
+    File(tempDir, "main.scala").apply {
+      writeText("""object Main { def main(args: Array[String]): Unit = println("Hello from Scala") }""")
+    }
+    File(tempDir, "main.py").apply { writeText("""print("Hello from Python")""") }
+    File(tempDir, "main.go").apply { writeText("""import "fmt"; func main() { fmt.Println("Hello from Go!") }""") }
+    File(tempDir, "main.ts").apply { writeText("""console.log("Hello from TypeScript")""") }
+    File(tempDir, "main.js").apply { writeText("""console.log("Hello from JavaScript")""") }
+    File(tempDir, "main.rb").apply { writeText("""puts "Hello from Ruby"""") }
 
     // Act
     val result = analyzer.analyzeStructure(tempDir)
 
     // Assert
-    assertTrue(result.containsKey("main.kt"), "Should contain main.kt file")
     assertTrue(result.containsKey("src"), "Should contain src directory")
+    assertTrue(result.containsKey("main.kt"), "Should contain main.kt file")
+    assertTrue(result.containsKey("main.scala"), "Should contain main.scala file")
+    assertTrue(result.containsKey("main.py"), "Should contain main.py file")
+    assertTrue(result.containsKey("main.go"), "Should contain main.go file")
+    assertTrue(result.containsKey("main.ts"), "Should contain main.ts file")
+    assertTrue(result.containsKey("main.rb"), "Should contain main.rb file")
+    assertTrue(result.containsKey("main.js"), "Should contain main.js file")
 
     val srcContent = result["src"] as? Map<*, *>
     assertNotNull(srcContent, "src should be a map")
@@ -109,14 +128,31 @@ class CodeAnalyzerTest {
     val mainKtInfo = result["main.kt"] as? Map<*, *>
     assertNotNull(mainKtInfo, "main.kt should have metadata")
     assertEquals("kotlin", mainKtInfo!!["language"], "Should identify Kotlin language")
-  }
 
-  data class SnippetsTestCase(
-    val name: String,
-    val files: Map<String, String>,
-    val expectedSnippetCount: Int,
-    val shouldContainFiles: List<String>,
-  )
+    val mainScalaInfo = result["main.scala"] as? Map<*, *>
+    assertNotNull(mainScalaInfo, "main.scala should have metadata")
+    assertEquals("scala", mainScalaInfo!!["language"], "Should identify Scala language")
+
+    val mainPyInfo = result["main.py"] as? Map<*, *>
+    assertNotNull(mainPyInfo, "main.py should have metadata")
+    assertEquals("python", mainPyInfo!!["language"], "Should identify Python language")
+
+    val mainGoInfo = result["main.go"] as? Map<*, *>
+    assertNotNull(mainGoInfo, "main.go should have metadata")
+    assertEquals("go", mainGoInfo!!["language"], "Should identify Go language")
+
+    val mainTsInfo = result["main.ts"] as? Map<*, *>
+    assertNotNull(mainTsInfo, "main.ts should have metadata")
+    assertEquals("typescript", mainTsInfo!!["language"], "Should identify TypeScript language")
+
+    val mainJsInfo = result["main.js"] as? Map<*, *>
+    assertNotNull(mainJsInfo, "main.js should have metadata")
+    assertEquals("javascript", mainJsInfo!!["language"], "Should identify JavaScript language")
+
+    val mainRbInfo = result["main.rb"] as? Map<*, *>
+    assertNotNull(mainRbInfo, "main.rb should have metadata")
+    assertEquals("ruby", mainRbInfo!!["language"], "Should identify Ruby language")
+  }
 
   @Test
   fun `test collectAllCodeSnippets with different file types`() {

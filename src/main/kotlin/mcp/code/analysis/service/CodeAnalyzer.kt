@@ -49,7 +49,7 @@ data class CodeAnalyzer(
         logger.info("Collected ${snippets.size} code snippets from ${repoDir.absolutePath}")
         logger.debug(
           """Snippets Found:
-          |${snippets.joinToString("\n")}"""
+            |${snippets.joinToString("\n")}"""
             .trimIndent()
         )
       }
