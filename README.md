@@ -48,7 +48,7 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
 Use the following arguments:
 
   ```bash
-  ~/mcp-github-code-analyzer/build/libs/mcp-github-code-analyzer-0.1.0-SNAPSHOT.jar --stdio
+  -jar ~/mcp-github-code-analyzer/build/libs/mcp-github-code-analyzer-0.1.0-SNAPSHOT.jar --stdio
   ```
 
 6. Click `Connect` to start the MCP Server.
