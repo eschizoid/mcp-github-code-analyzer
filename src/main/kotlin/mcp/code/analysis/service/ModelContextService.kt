@@ -46,9 +46,9 @@ data class ModelContextService(
   suspend fun generateResponse(prompt: String): String {
     return try {
       logger.info(
-        """Sending request to Ollama with prompt:
-          |${prompt}..."""
-          .trimIndent()
+        """|Sending request to Ollama with prompt:
+           |${prompt}..."""
+          .trimMargin()
       )
       val request = OllamaRequest(model = config.modelName, prompt = prompt)
       val ollamaApiUrl = "${config.modelApiUrl}/generate"
@@ -61,9 +61,9 @@ data class ModelContextService(
       } else {
         val response = httpResponse.body<OllamaResponse>()
         logger.info(
-          """Received response from Ollama:
-            |${response.response}"""
-            .trimIndent()
+          """|Received response from Ollama:
+             |${response.response}"""
+            .trimMargin()
         )
         response.response ?: "No response generated"
       }
@@ -80,66 +80,60 @@ data class ModelContextService(
    * @return A structured prompt for the model
    */
   fun buildInsightsPrompt(readme: String) =
-    """
-    |You are an expert codebase analyst with deep expertise in software architecture, secure and scalable system design, and programming languages including Java, Kotlin, Python, Go, Scala, JavaScript, TypeScript, C++, Rust, Ruby, and others.
-    |
-    |You will be provided with the README file of a repository. Based on the README **alone**, provide a comprehensive analysis covering the following aspects:
-    |
-    |1. **Overall architecture** — inferred from descriptions, diagrams, setup steps, or configuration details.
-    |2. **Primary programming languages** — identify the main languages used and describe how they interact if applicable.
-    |3. **Key components and dependencies** — identify modules, services, tools, or third-party integrations and their relationships.
-    |4. **Design patterns** — mention any explicitly referenced or implicitly suggested architectural or code patterns.
-    |5. **Code quality signals** — identify any potential issues or areas of improvement (e.g., based on structure, naming, tooling).
-    |6. **Security considerations** — highlight any security best practices followed or missing (e.g., credential handling, auth mechanisms).
-    |7. **Performance considerations** — discuss caching, concurrency, resource management, or deployment implications.
-    |8. **Language-specific practices** — note idiomatic usage or violations of best practices for the identified languages.
-    |
-    |If any of the above are not explicitly described, provide clearly labeled **inferences** based on available information.
-    |
-    |Format your response in markdown using clear sections. Include direct references to specific README content where relevant. If multiple languages are involved, explain any cross-language integration points.
-    |
-    |README Content:
-    |~~~markdown
-    |${readme.replace("```","~~~")}
-    |~~~"""
-      .trimIndent()
+    """|You are an expert codebase analyst with deep expertise in software architecture, secure and scalable system design, and programming languages including Java, Kotlin, Python, Go, Scala, JavaScript, TypeScript, C++, Rust, Ruby, and others.
+       |
+       |You will be provided with the README file of a repository. Based on the README **alone**, provide a comprehensive analysis covering the following aspects:
+       |
+       |1. **Overall architecture** — inferred from descriptions, diagrams, setup steps, or configuration details.
+       |2. **Primary programming languages** — identify the main languages used and describe how they interact if applicable.
+       |3. **Key components and dependencies** — identify modules, services, tools, or third-party integrations and their relationships.
+       |4. **Design patterns** — mention any explicitly referenced or implicitly suggested architectural or code patterns.
+       |5. **Code quality signals** — identify any potential issues or areas of improvement (e.g., based on structure, naming, tooling).
+       |6. **Security considerations** — highlight any security best practices followed or missing (e.g., credential handling, auth mechanisms).
+       |7. **Performance considerations** — discuss caching, concurrency, resource management, or deployment implications.
+       |8. **Language-specific practices** — note idiomatic usage or violations of best practices for the identified languages.
+       |
+       |If any of the above are not explicitly described, provide clearly labeled **inferences** based on available information.
+       |
+       |Format your response in markdown using clear sections. Include direct references to specific README content where relevant. If multiple languages are involved, explain any cross-language integration points.
+       |
+       |README Content:
+       |~~~markdown
+       |${readme.replace("```","~~~")}
+       |~~~"""
+      .trimMargin()
 
   /**
    * Build a summary prompt for the model context based on the provided code structure and snippets.
    *
    * @param codeStructure Map representing the structure of the codebase
    * @param codeSnippets List of code snippets from the repository
-   * @param insights List of insights generated from the README analysis
    * @return A structured prompt for the model
    */
-  fun buildSummaryPrompt(codeStructure: Map<String, Any>, codeSnippets: List<String>, insights: String): String =
-    """
-    |You are analyzing a software code repository. You are provided with the following information:
-    |
-    |**Code Structure:**
-    |${codeStructure.entries.joinToString("\n") { "${it.key}: ${it.value}" }}
-    |
-    |**Code Snippets:**
-    |${codeSnippets.joinToString("\n\n")}
-    |
-    |**Key Insights:**
-    |$insights
-    |
-    |Using this information, write a comprehensive and accessible summary of the codebase. Your goal is to help a technically proficient developer who is new to the project quickly understand its structure and purpose.
-    |
-    |Your summary must cover the following aspects:
-    |
-    |1. **Main purpose** of the project
-    |2. **Core architecture and components**
-    |3. **Technologies and programming languages** used
-    |4. **Key functionality and workflows**
-    |5. **Potential areas for improvement or refactoring**
-    |
-    |Where helpful, include **brief illustrative code snippets** from the examples provided to clarify key concepts, architectural decisions, or coding patterns.
-    |
-    |Format your response using markdown with clear section headings and concise, informative language. Avoid speculation beyond the provided inputs unless clearly stated as inference.
-    |"""
-      .trimIndent()
+  fun buildSummaryPrompt(codeStructure: Map<String, Any>, codeSnippets: List<String>): String =
+    """|You are analyzing a software code repository. You are provided with the following information:
+       |
+       |**Code Structure:**
+       |${codeStructure.entries.joinToString("\n") { "${it.key}: ${it.value}" }}
+       |
+       |**Code Snippets:**
+       |${codeSnippets.joinToString("\n\n")}
+       |
+       |Using this information, write a comprehensive and accessible summary of the codebase. Your goal is to help a technically proficient developer who is new to the project quickly understand its structure and purpose.
+       |
+       |Your summary must cover the following aspects:
+       |
+       |1. **Main purpose** of the project
+       |2. **Core architecture and components**
+       |3. **Technologies and programming languages** used
+       |4. **Key functionality and workflows**
+       |5. **Potential areas for improvement or refactoring**
+       |
+       |Where helpful, include **brief illustrative code snippets** from the examples provided to clarify key concepts, architectural decisions, or coding patterns.
+       |
+       |Format your response using markdown with clear section headings and concise, informative language. Avoid speculation beyond the provided inputs unless clearly stated as inference.
+       |"""
+      .trimMargin()
 
   private suspend fun sendRequest(url: String, request: OllamaRequest): HttpResponse {
     return httpClient.post(url) {

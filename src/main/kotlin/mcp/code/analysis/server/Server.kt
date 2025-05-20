@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory
  * Server for analyzing GitHub repositories using the Model Context Protocol (MCP). Provides functionalities for
  * analyzing GitHub repositories and checking analysis status.
  */
-data class Server(
+open class Server(
   private val repositoryAnalysisService: RepositoryAnalysisService = RepositoryAnalysisService(),
   private val logger: Logger = LoggerFactory.getLogger(Server::class.java),
   private val implementation: Implementation =
@@ -66,7 +66,7 @@ data class Server(
    *
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
-  fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
+  open fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
     val servers = ConcurrentMap<String, SdkServer>()
     logger.info("Starting SSE server on port $port.")
     logger.info("Use inspector to connect to the http://localhost:$port/sse")
@@ -111,7 +111,7 @@ data class Server(
    *
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
-  fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
+  open fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
     logger.info("Starting SSE server on port $port")
     logger.info("Use inspector to connect to http://localhost:$port/sse")
 
@@ -123,7 +123,7 @@ data class Server(
    *
    * @return The configured MCP server instance.
    */
-  private fun configureServer(): SdkServer {
+  open fun configureServer(): SdkServer {
     val server = SdkServer(implementation, serverOptions)
 
     server.addTool(

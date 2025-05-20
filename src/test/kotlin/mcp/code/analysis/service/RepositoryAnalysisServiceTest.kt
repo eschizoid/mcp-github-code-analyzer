@@ -6,8 +6,10 @@ import io.mockk.mockk
 import io.mockk.verify
 import java.io.File
 import java.lang.Exception
+import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -44,30 +46,33 @@ class RepositoryAnalysisServiceTest {
     val readmeContent = "# Test Repository"
     val codeSnippets =
       listOf(
-        """---
-          |File: src/Main.kt
-          |~~~kotlin
-          |fun main() {}
-          |~~~"""
-          .trimIndent()
+        """|---
+           |File: src/Main.kt
+           |~~~kotlin
+           |fun main() {}
+           |~~~"""
+          .trimMargin()
       )
-    val modelResponse = "Repository Analysis: This is a simple Kotlin project"
     val insightsPrompt = "insights prompt"
     val summaryPrompt = "summary prompt"
+    val insightsResponse = "insights"
+    val summaryResponse = "summary"
 
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readmeContent
     every { modelContextService.buildInsightsPrompt(readmeContent) } returns insightsPrompt
-    every { modelContextService.buildSummaryPrompt(any(), any(), any()) } returns summaryPrompt
+    every { modelContextService.buildSummaryPrompt(any(), any()) } returns summaryPrompt
     every { codeAnalyzer.analyzeStructure(clonedRepo) } returns emptyMap()
     every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
-    coEvery { modelContextService.generateResponse(any()) } returns modelResponse
+    coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
+    coEvery { modelContextService.generateResponse(summaryPrompt) } returns summaryResponse
 
     // Act
     val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
 
     // Assert
-    assert(result == modelResponse)
+    assertTrue(result.contains(insightsResponse))
+    assertTrue(result.contains(summaryResponse))
     verify { gitService.cloneRepository(repoUrl, branch) }
     verify { codeAnalyzer.findReadmeFile(clonedRepo) }
     verify { codeAnalyzer.collectAllCodeSnippets(clonedRepo) }
@@ -113,12 +118,12 @@ class RepositoryAnalysisServiceTest {
     val readmeContent = "# Test Repository"
     val codeSnippets =
       listOf(
-        """---
-          |File: src/Main.kt
-          |~~~kotlin
-          |fun main() {}
-          |~~~"""
-          .trimIndent()
+        """|---
+           |File: src/Main.kt
+           |~~~kotlin
+           |fun main() {}
+           |~~~"""
+          .trimMargin()
       )
 
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
@@ -150,14 +155,21 @@ class RepositoryAnalysisServiceTest {
     every { codeAnalyzer.analyzeStructure(clonedRepo) } returns emptyMap()
     every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns emptySnippets
     every { modelContextService.buildInsightsPrompt(readmeContent) } returns insightsPrompt
-    every { modelContextService.buildSummaryPrompt(any(), any(), any()) } returns summaryPrompt
+    every { modelContextService.buildSummaryPrompt(any(), any()) } returns summaryPrompt
     coEvery { modelContextService.generateResponse(any()) } returns modelResponse
 
     // Act
     val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
 
     // Assert
-    assert(result == modelResponse)
+    assertEquals(
+      """|$modelResponse
+       |
+       |$modelResponse
+       |"""
+        .trimMargin(),
+      result,
+    )
     verify { codeAnalyzer.collectAllCodeSnippets(clonedRepo) }
     verify {
       runBlocking { modelContextService.generateResponse("Insights prompt") }
@@ -174,12 +186,12 @@ class RepositoryAnalysisServiceTest {
     val noReadme = "No README content available."
     val codeSnippets =
       listOf(
-        """"---
-           |File: src/Main.kt
-           |~~~kotlin
-           |fun main() {}
-           |~~~"""
-          .trimIndent()
+        """"|---
+            |File: src/Main.kt
+            |~~~kotlin
+            |fun main() {}
+            |~~~"""
+          .trimMargin()
       )
     val modelResponse = "Repository Analysis: Kotlin project without README"
     val insightsPrompt = "No README content available"
@@ -190,14 +202,21 @@ class RepositoryAnalysisServiceTest {
     every { codeAnalyzer.analyzeStructure(clonedRepo) } returns emptyMap()
     every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
     every { modelContextService.buildInsightsPrompt(noReadme) } returns insightsPrompt
-    every { modelContextService.buildSummaryPrompt(any(), any(), any()) } returns summaryPrompt
+    every { modelContextService.buildSummaryPrompt(any(), any()) } returns summaryPrompt
     coEvery { modelContextService.generateResponse(any()) } returns modelResponse
 
     // Act
     val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
 
     // Assert
-    assert(result == modelResponse)
+    assertEquals(
+      """|$modelResponse
+       |
+       |$modelResponse
+       |"""
+        .trimMargin(),
+      result,
+    )
     verify { codeAnalyzer.findReadmeFile(clonedRepo) }
     verify {
       runBlocking {

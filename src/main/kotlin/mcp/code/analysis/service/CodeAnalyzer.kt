@@ -37,20 +37,20 @@ data class CodeAnalyzer(
         val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
         val lang = getLanguageFromExtension(file.extension)
         val content = file.readLines().joinToString("\n")
-        """---
-          |File: $relativePath
-          |~~~$lang
-          |$content
-          |~~~"""
-          .trimIndent()
+        """|---
+           |File: $relativePath
+           |~~~$lang
+           |$content
+           |~~~"""
+          .trimMargin()
       }
       .toList()
       .also { snippets ->
         logger.info("Collected ${snippets.size} code snippets from ${repoDir.absolutePath}")
         logger.debug(
-          """Snippets Found:
-            |${snippets.joinToString("\n")}"""
-            .trimIndent()
+          """|Snippets Found:
+             |${snippets.joinToString("\n")}"""
+            .trimMargin()
         )
       }
 

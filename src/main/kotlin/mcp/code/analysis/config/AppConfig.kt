@@ -19,23 +19,6 @@ data class AppConfig(
      * Creates an instance of [AppConfig] by retrieving values from environment variables. If an environment variable is
      * not set, a default value is used.
      *
-     * @return An instance of [AppConfig] with the retrieved or default values.
-     */
-    fun fromEnv(): AppConfig =
-      AppConfig(
-        serverPort = System.getenv("SERVER_PORT")?.toIntOrNull() ?: 3001,
-        githubToken = System.getenv("GITHUB_TOKEN") ?: "",
-        cloneDirectory = System.getenv("CLONE_DIRECTORY") ?: "/tmp/mcp-github-code-analyzer/clones",
-        logDirectory = System.getenv("LOGS_DIRECTORY") ?: "/tmp/mcp-github-code-analyzer/logs",
-        modelApiUrl = System.getenv("MODEL_API_URL") ?: "http://localhost:11434/api",
-        modelApiKey = System.getenv("MODEL_API_KEY") ?: "",
-        modelName = System.getenv("MODEL_NAME") ?: "llama3.2",
-      )
-
-    /**
-     * Creates an instance of [AppConfig] by retrieving values from environment variables. If an environment variable is
-     * not set, a default value is used.
-     *
      * @param getEnvFunc Function to retrieve environment variables (defaults to System.getenv)
      * @return An instance of [AppConfig] with the retrieved or default values.
      */

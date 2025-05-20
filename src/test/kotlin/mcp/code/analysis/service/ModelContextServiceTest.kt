@@ -41,7 +41,6 @@ class ModelContextServiceTest {
     val name: String,
     val codeStructure: Map<String, Any>,
     val codeSnippets: List<String>,
-    val insights: String,
     val expectedPromptContains: List<String>,
   )
 
@@ -90,16 +89,15 @@ class ModelContextServiceTest {
         InsightsPromptTestCase(
           name = "standard README with code blocks",
           readmeContent =
-            """
-                    # Test Project
-
-                    This is a test project with ```code blocks```
-
-                    ## Features
-                    - Feature 1
-                    - Feature 2
-                """
-              .trimIndent(),
+            """|# Test Project
+               |
+               |This is a test project with ```code blocks```
+               |
+               |## Features
+               |- Feature 1
+               |- Feature 2
+               |"""
+              .trimMargin(),
           expectedContains =
             listOf(
               "README Content:",
@@ -118,18 +116,16 @@ class ModelContextServiceTest {
         InsightsPromptTestCase(
           name = "README with multiple code blocks",
           readmeContent =
-            """
-                    # Code Examples
-                    ```kotlin
-                    fun test() {}
-                    ```
-
-                    And more code:
-                    ```java
-                    public void test() {}
-                    ```
-                """
-              .trimIndent(),
+            """|# Code Examples
+               |```kotlin
+               |fun test() {}
+               |```
+               |
+               |And more code:
+               |```java
+               |public void test() {}
+               |```"""
+              .trimMargin(),
           expectedContains = listOf("~~~kotlin", "~~~java", "fun test() {}"),
           shouldNotContain = listOf("```"),
         ),
@@ -214,18 +210,13 @@ class ModelContextServiceTest {
           codeStructure = mapOf("main.kt" to mapOf("language" to "kotlin")),
           codeSnippets =
             listOf(
-              """File: main.kt
-                |~~~kotlin
-                |fun main() {}
-                |~~~"""
+              """|File: main.kt
+                 |~~~kotlin
+                 |fun main() {}
+                 |~~~"""
                 .trimMargin()
             ),
-          insights =
-            """Overall architecture: Simple
-              |Language: Kotlin"""
-              .trimMargin(),
-          expectedPromptContains =
-            listOf("Code Snippets:", "fun main() {}", "Key Insights:", "Overall architecture: Simple"),
+          expectedPromptContains = listOf("Code Snippets:", "fun main() {}"),
         ),
         SummaryTestCase(
           name = "complex project",
@@ -235,52 +226,37 @@ class ModelContextServiceTest {
             ),
           codeSnippets =
             listOf(
-              """File: src/main.kt
-                |~~~kotlin
-                |fun main() {}
-                |~~~"""
+              """|File: src/main.kt
+                 |~~~kotlin
+                 |fun main() {}
+                 |~~~"""
                 .trimMargin(),
-              """File: src/util.kt
-                |~~~kotlin
-                |fun util() {}
-                |~~~"""
+              """|File: src/util.kt
+                 |~~~kotlin
+                 |fun util() {}
+                 |~~~"""
                 .trimMargin(),
             ),
-          insights =
-            """Overall architecture: Modular
-              |Primary languages: Kotlin
-              |Design patterns: Singleton"""
-              .trimMargin(),
-          expectedPromptContains =
-            listOf(
-              "Code Snippets:",
-              "fun main() {}",
-              "fun util() {}",
-              "Key Insights:",
-              "Overall architecture: Modular",
-              "Design patterns: Singleton",
-            ),
+          expectedPromptContains = listOf("Code Snippets:", "fun main() {}", "fun util() {}"),
         ),
         SummaryTestCase(
           name = "empty project",
           codeStructure = emptyMap(),
           codeSnippets = emptyList(),
-          insights = "",
-          expectedPromptContains = listOf("Code Snippets:", "Key Insights:"),
+          expectedPromptContains = listOf("Code Snippets:"),
         ),
       )
 
     testCases.forEach { testCase ->
       val mockService = mockk<ModelContextService>()
       coEvery { mockService.generateResponse(any()) } returns "Mocked summary response"
-      coEvery { mockService.buildSummaryPrompt(any(), any(), any()) } coAnswers
+      coEvery { mockService.buildSummaryPrompt(any(), any()) } coAnswers
         {
           val codeStructure = firstArg<Map<String, Any>>()
           val codeSnippets = secondArg<List<String>>()
-          val insights = thirdArg<String>()
 
           // Act
-          val prompt = service.buildSummaryPrompt(codeStructure, codeSnippets, insights)
+          val prompt = service.buildSummaryPrompt(codeStructure, codeSnippets)
 
           // Assert
           testCase.expectedPromptContains.forEach { expected ->
@@ -291,11 +267,11 @@ class ModelContextServiceTest {
         }
 
       // Act
-      val summary = mockService.buildSummaryPrompt(testCase.codeStructure, testCase.codeSnippets, testCase.insights)
+      val summary = mockService.buildSummaryPrompt(testCase.codeStructure, testCase.codeSnippets)
 
       // Assert
       assertEquals("Mocked summary response", summary)
-      coVerify { mockService.buildSummaryPrompt(testCase.codeStructure, testCase.codeSnippets, testCase.insights) }
+      coVerify { mockService.buildSummaryPrompt(testCase.codeStructure, testCase.codeSnippets) }
     }
   }
 }
