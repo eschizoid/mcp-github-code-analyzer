@@ -43,12 +43,12 @@ class CodeAnalyzerTest {
           files =
             mapOf(
               "README.md" to
-                """# Project
+                """|# Project
                    |This is a test project"""
                   .trimMargin()
             ),
           expectedContent =
-            """# Project
+            """|# Project
                |This is a test project"""
               .trimMargin(),
           containsLogMessage = "Readme file found",

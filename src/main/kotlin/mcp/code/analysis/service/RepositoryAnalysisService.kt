@@ -1,5 +1,7 @@
 package mcp.code.analysis.service
 
+import kotlinx.coroutines.*
+
 /** Service for analyzing Git repositories. */
 data class RepositoryAnalysisService(
   private val gitService: GitService = GitService(),
@@ -13,7 +15,7 @@ data class RepositoryAnalysisService(
    * @param branch The branch of the repository to analyze.
    * @return A summary of the analysis results.
    */
-  suspend fun analyzeRepository(repoUrl: String, branch: String): String {
+  fun analyzeRepository(repoUrl: String, branch: String): String {
     return try {
       val repoDir = gitService.cloneRepository(repoUrl, branch)
 
@@ -22,10 +24,17 @@ data class RepositoryAnalysisService(
       val codeSnippets = codeAnalyzer.collectAllCodeSnippets(repoDir)
 
       val insightsPrompt = modelContextService.buildInsightsPrompt(readmeContent)
-      val insightsResponse = modelContextService.generateResponse(insightsPrompt)
+      val summaryPrompt = modelContextService.buildSummaryPrompt(codeStructure, codeSnippets)
 
-      val summaryPrompt = modelContextService.buildSummaryPrompt(codeStructure, codeSnippets, insightsResponse)
-      modelContextService.generateResponse(summaryPrompt)
+      runBlocking {
+        val insights = async { modelContextService.generateResponse(insightsPrompt) }
+        val summary = async { modelContextService.generateResponse(summaryPrompt) }
+        """|${insights.await()}
+           |
+           |${summary.await()}
+           |"""
+          .trimMargin()
+      }
     } catch (e: Exception) {
       throw Exception("Error analyzing repository: ${e.message}", e)
     }

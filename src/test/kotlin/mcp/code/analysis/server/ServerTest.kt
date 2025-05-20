@@ -1,16 +1,24 @@
 package mcp.code.analysis.server
 
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.cio.*
+import io.ktor.server.engine.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.server.sse.*
+import io.ktor.util.collections.*
 import io.mockk.*
 import io.modelcontextprotocol.kotlin.sdk.*
+import io.modelcontextprotocol.kotlin.sdk.server.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
-import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
+import kotlin.invoke
 import kotlin.test.assertEquals
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import mcp.code.analysis.service.RepositoryAnalysisService
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.slf4j.Logger
 
@@ -44,20 +52,17 @@ class ServerTest {
   }
 
   @Test
-  @Disabled("Temporarily disabled")
   fun `configureServer should register analyze-repository tool`() {
     // Arrange
     mockkConstructor(SdkServer::class)
-    val mockSdkServer = mockk<SdkServer>(relaxed = true)
-    every { anyConstructed<SdkServer>() } returns mockSdkServer
-    every { mockSdkServer.addTool(any(), any(), any(), any()) } returns mockk()
+    every { anyConstructed<SdkServer>().addTool(any(), any(), any(), any()) } returns mockk()
 
     val configureServerMethod = server.javaClass.getDeclaredMethod("configureServer")
     configureServerMethod.isAccessible = true
     configureServerMethod.invoke(server)
 
-    // Act & Assert
-    verify { mockSdkServer.addTool(any(), any(), any(), any()) }
+    // Assert
+    verify { anyConstructed<SdkServer>().addTool(any(), any(), any(), any()) }
   }
 
   @Test
@@ -91,23 +96,84 @@ class ServerTest {
   }
 
   @Test
-  @Disabled("Temporarily disabled")
   fun `runMcpServerUsingStdio should connect transport`() = runBlocking {
     // Arrange
-    mockkConstructor(StdioServerTransport::class)
-    val mockTransport = mockk<StdioServerTransport>(relaxed = true)
-    every { anyConstructed<StdioServerTransport>() } returns mockTransport
-
-    mockkConstructor(SdkServer::class)
     val mockSdkServer = mockk<SdkServer>(relaxed = true)
-    every { anyConstructed<SdkServer>() } returns mockSdkServer
+
+    mockkConstructor(StdioServerTransport::class)
+
     coEvery { mockSdkServer.connect(any()) } just Runs
     coEvery { mockSdkServer.onClose(any()) } answers { firstArg<() -> Unit>().invoke() }
 
     // Act
-    server.runMcpServerUsingStdio()
+    val testServer = TestableServer(repositoryAnalysisService, logger, mockSdkServer)
+    testServer.runMcpServerUsingStdio()
 
     // Assert
-    coVerify { mockSdkServer.connect(mockTransport) }
+    coVerify { mockSdkServer.connect(any()) }
+  }
+
+  @Test
+  fun `runSseMcpServerWithPlainConfiguration should start server`() {
+    // Arrange
+    val mockSdkServer = mockk<SdkServer>(relaxed = true)
+    val mockServer = mockk<EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>>(relaxed = true)
+
+    mockkStatic("io.ktor.server.engine.EmbeddedServerKt")
+    every { embeddedServer(CIO, host = "0.0.0.0", port = 3001, module = any()) } returns mockServer
+    every { mockServer.start(wait = true) } returns mockServer
+
+    coEvery { mockSdkServer.connect(any()) } just Runs
+    coEvery { mockSdkServer.onClose(any()) } answers { firstArg<() -> Unit>().invoke() }
+
+    val testServer = spyk(TestableServer(repositoryAnalysisService, logger, mockSdkServer), recordPrivateCalls = true)
+
+    // Act
+    testServer.runSseMcpServerWithPlainConfiguration(3001)
+
+    // Assert
+    verify { embeddedServer(CIO, host = "0.0.0.0", port = 3001, module = any()) }
+  }
+
+  @Test
+  fun `runSseMcpServerUsingKtorPlugin should start server`() {
+    // Arrange
+    val mockSdkServer = mockk<SdkServer>(relaxed = true)
+    val mockServer = mockk<EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>>(relaxed = true)
+
+    mockkStatic("io.ktor.server.engine.EmbeddedServerKt")
+    every { embeddedServer(CIO, host = "0.0.0.0", port = 3001, module = any()) } returns mockServer
+    every { mockServer.start(wait = true) } returns mockServer
+
+    coEvery { mockSdkServer.connect(any()) } just Runs
+    coEvery { mockSdkServer.onClose(any()) } answers { firstArg<() -> Unit>().invoke() }
+
+    val testServer = spyk(TestableServer(repositoryAnalysisService, logger, mockSdkServer), recordPrivateCalls = true)
+
+    // Act
+    testServer.runSseMcpServerUsingKtorPlugin(3001)
+
+    // Assert
+    verify { embeddedServer(CIO, host = "0.0.0.0", port = 3001, module = any()) }
+  }
+
+  class TestableServer(
+    repositoryAnalysisService: RepositoryAnalysisService,
+    logger: Logger,
+    private val sdkServer: SdkServer,
+  ) : Server(repositoryAnalysisService, logger) {
+    override fun configureServer(): SdkServer = sdkServer
+
+    override fun runSseMcpServerUsingKtorPlugin(port: Int) {
+      embeddedServer(CIO, host = "0.0.0.0", port = port) { mcp { configureServer() } }.start(wait = false)
+    }
+
+    override fun runSseMcpServerWithPlainConfiguration(port: Int) {
+      embeddedServer(CIO, host = "0.0.0.0", port = port) {
+          install(SSE)
+          routing {}
+        }
+        .start(wait = false)
+    }
   }
 }
