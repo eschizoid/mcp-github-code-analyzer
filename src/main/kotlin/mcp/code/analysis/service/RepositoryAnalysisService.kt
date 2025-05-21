@@ -1,7 +1,5 @@
 package mcp.code.analysis.service
 
-import kotlinx.coroutines.*
-
 /** Service for analyzing Git repositories. */
 data class RepositoryAnalysisService(
   private val gitService: GitService = GitService(),
@@ -15,26 +13,20 @@ data class RepositoryAnalysisService(
    * @param branch The branch of the repository to analyze.
    * @return A summary of the analysis results.
    */
-  fun analyzeRepository(repoUrl: String, branch: String): String {
+  suspend fun analyzeRepository(repoUrl: String, branch: String): String {
     return try {
       val repoDir = gitService.cloneRepository(repoUrl, branch)
 
-      val readmeContent = codeAnalyzer.findReadmeFile(repoDir)
-      val codeStructure = codeAnalyzer.analyzeStructure(repoDir)
+      val readme = codeAnalyzer.findReadmeFile(repoDir)
       val codeSnippets = codeAnalyzer.collectAllCodeSnippets(repoDir)
 
-      val insightsPrompt = modelContextService.buildInsightsPrompt(readmeContent)
-      val summaryPrompt = modelContextService.buildSummaryPrompt(codeStructure, codeSnippets)
+      val insightsPrompt = modelContextService.buildInsightsPrompt(codeSnippets, readme)
+      val insightsResponse = modelContextService.generateResponse(insightsPrompt)
 
-      runBlocking {
-        val insights = async { modelContextService.generateResponse(insightsPrompt) }
-        val summary = async { modelContextService.generateResponse(summaryPrompt) }
-        """|${insights.await()}
-           |
-           |${summary.await()}
-           |"""
-          .trimMargin()
-      }
+      val summaryPrompt = modelContextService.buildSummaryPrompt(insightsResponse)
+      val summaryResponse = modelContextService.generateResponse(summaryPrompt)
+
+      summaryResponse
     } catch (e: Exception) {
       throw Exception("Error analyzing repository: ${e.message}", e)
     }

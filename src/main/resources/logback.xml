@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
 
     <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.err</target>
@@ -28,8 +28,8 @@
         <appender-ref ref="FILE"/>
     </root>
 
-    <logger name="io.modelcontextprotocol" level="WARN"/> <!-- Changed to catch all MCP packages -->
+    <logger name="io.modelcontextprotocol" level="WARN"/>
     <logger name="io.netty" level="INFO"/>
     <logger name="org.eclipse.jetty" level="INFO"/>
-    <logger name="ch.qos.logback" level="WARN"/> <!-- Reduce internal logback messages -->
+    <logger name="ch.qos.logback" level="WARN"/>
 </configuration>

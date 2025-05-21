@@ -37,8 +37,7 @@ data class CodeAnalyzer(
         val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
         val lang = getLanguageFromExtension(file.extension)
         val content = file.readLines().joinToString("\n")
-        """|---
-           |File: $relativePath
+        """|--- File: $relativePath
            |~~~$lang
            |$content
            |~~~"""
