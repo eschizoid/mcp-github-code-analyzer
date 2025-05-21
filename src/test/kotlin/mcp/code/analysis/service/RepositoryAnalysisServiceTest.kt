@@ -7,7 +7,6 @@ import io.mockk.verify
 import java.io.File
 import java.lang.Exception
 import kotlin.test.assertEquals
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -40,188 +39,155 @@ class RepositoryAnalysisServiceTest {
   @Test
   fun `analyzeRepository should return analysis result`() = runTest {
     // Arrange
-    val repoUrl = "https://github.com/user/repo"
+    val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val clonedRepo = File(tempDir, "repo")
-    val readmeContent = "# Test Repository"
-    val codeSnippets =
-      listOf(
-        """|---
-           |File: src/Main.kt
-           |~~~kotlin
-           |fun main() {}
-           |~~~"""
-          .trimMargin()
-      )
-    val insightsPrompt = "insights prompt"
-    val summaryPrompt = "summary prompt"
-    val insightsResponse = "insights"
-    val summaryResponse = "summary"
+    val readme = "# Test Repository"
+    val codeSnippets = listOf("--- File: src/main.kt\n~~~kotlin\nfun main() {}\n~~~")
+    val insightsPrompt = "Generated insights prompt"
+    val insightsResponse = "File analysis..."
+    val summaryPrompt = "Generated summary prompt"
+    val summaryResponse = "Repository summary"
 
+    // Mock behavior
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
-    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readmeContent
-    every { modelContextService.buildInsightsPrompt(readmeContent) } returns insightsPrompt
-    every { modelContextService.buildSummaryPrompt(any(), any()) } returns summaryPrompt
-    every { codeAnalyzer.analyzeStructure(clonedRepo) } returns emptyMap()
+    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readme
     every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
+    every { modelContextService.buildInsightsPrompt(codeSnippets, readme) } returns insightsPrompt
     coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
+    every { modelContextService.buildSummaryPrompt(insightsResponse) } returns summaryPrompt
     coEvery { modelContextService.generateResponse(summaryPrompt) } returns summaryResponse
 
     // Act
     val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
 
     // Assert
-    assertTrue(result.contains(insightsResponse))
-    assertTrue(result.contains(summaryResponse))
+    assertEquals(summaryResponse, result)
     verify { gitService.cloneRepository(repoUrl, branch) }
     verify { codeAnalyzer.findReadmeFile(clonedRepo) }
     verify { codeAnalyzer.collectAllCodeSnippets(clonedRepo) }
-    verify { runBlocking { modelContextService.generateResponse(any()) } }
+    verify { modelContextService.buildInsightsPrompt(codeSnippets, readme) }
+    verify { modelContextService.buildSummaryPrompt(insightsResponse) }
   }
 
   @Test
   fun `analyzeRepository should handle git errors`() = runTest {
     // Arrange
-    val repoUrl = "https://github.com/user/repo"
+    val repoUrl = "https://github.com/test/repo"
     val branch = "main"
+    val errorMessage = "Repository not found"
 
-    every { gitService.cloneRepository(repoUrl, branch) } throws Exception("Error cloning repository")
+    every { gitService.cloneRepository(repoUrl, branch) } throws Exception(errorMessage)
 
     // Act & Assert
     val exception = assertThrows<Exception> { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
-    assert(exception.message?.contains("Error cloning repository") == true)
+
+    assertTrue(exception.message!!.contains("Error analyzing repository"))
+    assertTrue(exception.cause?.message!!.contains(errorMessage))
   }
 
   @Test
-  fun `analyzeRepository should handle code analysis errors`() {
+  fun `analyzeRepository should handle code analysis errors`() = runTest {
     // Arrange
-    val repoUrl = "https://github.com/user/repo"
+    val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val clonedRepo = File(tempDir, "repo")
+    val errorMessage = "Error processing code files"
 
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
-    every { codeAnalyzer.findReadmeFile(clonedRepo) } throws Exception("Error analyzing repository code")
+    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns "README content"
+    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } throws Exception(errorMessage)
 
     // Act & Assert
-    val exception =
-      assertThrows<Exception> { runBlocking { repositoryAnalysisService.analyzeRepository(repoUrl, branch) } }
+    val exception = assertThrows<Exception> { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
 
-    assert(exception.message?.contains("Error analyzing repository code") == true)
+    assertTrue(exception.message!!.contains("Error analyzing repository"))
+    assertTrue(exception.cause?.message!!.contains(errorMessage))
   }
 
   @Test
-  fun `analyzeRepository should handle model service errors`() {
+  fun `analyzeRepository should handle model service errors`() = runTest {
     // Arrange
-    val repoUrl = "https://github.com/user/repo"
+    val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val clonedRepo = File(tempDir, "repo")
-    val readmeContent = "# Test Repository"
-    val codeSnippets =
-      listOf(
-        """|---
-           |File: src/Main.kt
-           |~~~kotlin
-           |fun main() {}
-           |~~~"""
-          .trimMargin()
-      )
+    val readme = "# Test Repository"
+    val codeSnippets = listOf("--- File: src/main.kt\n~~~kotlin\nfun main() {}\n~~~")
+    val insightsPrompt = "Generated insights prompt"
+    val errorMessage = "Model API error"
 
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
-    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readmeContent
+    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readme
     every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
-    coEvery { modelContextService.generateResponse(any()) } throws Exception("Error analyzing repository")
+    every { modelContextService.buildInsightsPrompt(codeSnippets, readme) } returns insightsPrompt
+    coEvery { modelContextService.generateResponse(insightsPrompt) } throws Exception(errorMessage)
 
     // Act & Assert
-    val exception =
-      assertThrows<Exception> { runBlocking { repositoryAnalysisService.analyzeRepository(repoUrl, branch) } }
+    val exception = assertThrows<Exception> { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
 
-    assert(exception.message?.contains("Error analyzing repository") == true)
+    assertTrue(exception.message!!.contains("Error analyzing repository"))
+    assertTrue(exception.cause?.message!!.contains(errorMessage))
   }
 
   @Test
   fun `analyzeRepository should handle empty code snippets`() = runTest {
     // Arrange
-    val repoUrl = "https://github.com/user/repo"
+    val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val clonedRepo = File(tempDir, "repo")
-    val readmeContent = "# Test Repository"
-    val emptySnippets = emptyList<String>()
-    val insightsPrompt = "Insights prompt"
-    val summaryPrompt = "Summary prompt"
-    val modelResponse = "Repository Analysis"
+    val readme = "# Test Repository"
+    val emptyCodeSnippets = emptyList<String>()
+    val insightsPrompt = "Generated insights prompt with empty snippets"
+    val insightsResponse = "Limited file analysis due to no code snippets"
+    val summaryPrompt = "Generated summary prompt"
+    val summaryResponse = "Limited repository summary"
 
+    // Mock behavior
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
-    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readmeContent
-    every { codeAnalyzer.analyzeStructure(clonedRepo) } returns emptyMap()
-    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns emptySnippets
-    every { modelContextService.buildInsightsPrompt(readmeContent) } returns insightsPrompt
-    every { modelContextService.buildSummaryPrompt(any(), any()) } returns summaryPrompt
-    coEvery { modelContextService.generateResponse(any()) } returns modelResponse
+    every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readme
+    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns emptyCodeSnippets
+    every { modelContextService.buildInsightsPrompt(emptyCodeSnippets, readme) } returns insightsPrompt
+    coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
+    every { modelContextService.buildSummaryPrompt(insightsResponse) } returns summaryPrompt
+    coEvery { modelContextService.generateResponse(summaryPrompt) } returns summaryResponse
 
     // Act
     val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
 
     // Assert
-    assertEquals(
-      """|$modelResponse
-       |
-       |$modelResponse
-       |"""
-        .trimMargin(),
-      result,
-    )
+    assertEquals(summaryResponse, result)
     verify { codeAnalyzer.collectAllCodeSnippets(clonedRepo) }
-    verify {
-      runBlocking { modelContextService.generateResponse("Insights prompt") }
-      runBlocking { modelContextService.generateResponse("Summary prompt") }
-    }
+    verify { modelContextService.buildInsightsPrompt(emptyCodeSnippets, readme) }
   }
 
   @Test
   fun `analyzeRepository should handle missing README`() = runTest {
     // Arrange
-    val repoUrl = "https://github.com/user/repo"
+    val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val clonedRepo = File(tempDir, "repo")
     val noReadme = "No README content available."
-    val codeSnippets =
-      listOf(
-        """"|---
-            |File: src/Main.kt
-            |~~~kotlin
-            |fun main() {}
-            |~~~"""
-          .trimMargin()
-      )
-    val modelResponse = "Repository Analysis: Kotlin project without README"
-    val insightsPrompt = "No README content available"
-    val summaryPrompt = "Summary prompt"
+    val codeSnippets = listOf("--- File: src/main.kt\n~~~kotlin\nfun main() {}\n~~~")
+    val insightsPrompt = "Generated insights prompt without readme"
+    val insightsResponse = "File analysis without readme context"
+    val summaryPrompt = "Generated summary prompt"
+    val summaryResponse = "Repository summary"
 
+    // Mock behavior
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns noReadme
-    every { codeAnalyzer.analyzeStructure(clonedRepo) } returns emptyMap()
     every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
-    every { modelContextService.buildInsightsPrompt(noReadme) } returns insightsPrompt
-    every { modelContextService.buildSummaryPrompt(any(), any()) } returns summaryPrompt
-    coEvery { modelContextService.generateResponse(any()) } returns modelResponse
+    every { modelContextService.buildInsightsPrompt(codeSnippets, noReadme) } returns insightsPrompt
+    coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
+    every { modelContextService.buildSummaryPrompt(insightsResponse) } returns summaryPrompt
+    coEvery { modelContextService.generateResponse(summaryPrompt) } returns summaryResponse
 
     // Act
     val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
 
     // Assert
-    assertEquals(
-      """|$modelResponse
-       |
-       |$modelResponse
-       |"""
-        .trimMargin(),
-      result,
-    )
+    assertEquals(summaryResponse, result)
     verify { codeAnalyzer.findReadmeFile(clonedRepo) }
-    verify {
-      runBlocking {
-        modelContextService.generateResponse(match { prompt -> prompt.contains("No README content available") })
-      }
-    }
+    verify { modelContextService.buildInsightsPrompt(codeSnippets, noReadme) }
   }
 }

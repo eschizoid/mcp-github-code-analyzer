@@ -26,7 +26,7 @@ version = rootProject.scmVersion.version
 description = "MCP Server for GitHub Code Repositories Analysis"
 
 dependencies {
-  val ktorVersion = "3.1.3"
+  val ktorVersion = "3.0.2"
   val coroutinesVersion = "1.10.2"
 
   // Kotlin standard library
@@ -47,7 +47,7 @@ dependencies {
 
   // Logging
   implementation("ch.qos.logback:logback-classic:1.5.18")
-  implementation("org.slf4j:jul-to-slf4j:2.0.17")
+  implementation("org.slf4j:slf4j-nop:2.0.9")
 
   // Coroutines
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")

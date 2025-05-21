@@ -13,6 +13,7 @@ data class CodeAnalyzer(
   private val binaryDetectionThreshold: Double = 0.05,
   private val logger: Logger = LoggerFactory.getLogger(ModelContextService::class.java),
 ) {
+
   /**
    * Analyzes the structure of a codebase.
    *
@@ -37,8 +38,7 @@ data class CodeAnalyzer(
         val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
         val lang = getLanguageFromExtension(file.extension)
         val content = file.readLines().joinToString("\n")
-        """|---
-           |File: $relativePath
+        """|--- File: $relativePath
            |~~~$lang
            |$content
            |~~~"""

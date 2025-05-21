@@ -7,6 +7,7 @@ import org.eclipse.jgit.api.Git
 
 /** Service for interacting with Git repositories. */
 data class GitService(private val config: AppConfig = AppConfig.fromEnv()) {
+
   /**
    * Clones a Git repository to a temporary directory.
    *

@@ -36,13 +36,8 @@ class ModelContextServiceTest {
     val expectedResult: String,
   )
 
-  // Test cases for generateSummary function
-  data class SummaryTestCase(
-    val name: String,
-    val codeStructure: Map<String, Any>,
-    val codeSnippets: List<String>,
-    val expectedPromptContains: List<String>,
-  )
+  // Test cases for buildSummaryPrompt function
+  data class SummaryTestCase(val name: String, val insights: String, val expectedPromptContains: List<String>)
 
   @BeforeEach
   fun setUp() {
@@ -71,7 +66,7 @@ class ModelContextServiceTest {
         engine {
           addHandler { request ->
             respond(
-              content = """{"model":"test-model","response":"Generated test response","done":true}""",
+              content = """{"message":{"role":"assistant","content":"Generated test response"}}""",
               status = HttpStatusCode.OK,
               headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
@@ -133,7 +128,7 @@ class ModelContextServiceTest {
 
     testCases.forEach { testCase ->
       // Act
-      val prompt = service.buildInsightsPrompt(testCase.readmeContent)
+      val prompt = service.buildInsightsPrompt(emptyList(), testCase.readmeContent)
 
       // Assert
       testCase.expectedContains.forEach { expected ->
@@ -153,19 +148,40 @@ class ModelContextServiceTest {
         ResponseTestCase(
           name = "simple prompt",
           prompt = "Test prompt",
-          mockResponse = """{"model":"test-model","response":"Generated test response","done":true}""",
+          mockResponse =
+            """|{
+               |  "message": {
+               |    "role": "assistant",
+               |    "content": "Generated test response"
+               |  }
+               |}"""
+              .trimMargin(),
           expectedResult = "Generated test response",
         ),
         ResponseTestCase(
           name = "empty response",
           prompt = "Empty test",
-          mockResponse = """{"model":"test-model","response":"","done":true}""",
+          mockResponse =
+            """|{
+               |  "message": {
+               |    "role": "assistant",
+               |    "content": ""
+               |  }
+               |}"""
+              .trimMargin(),
           expectedResult = "",
         ),
         ResponseTestCase(
           name = "special characters",
           prompt = "Special chars test",
-          mockResponse = """{"model":"test-model","response":"Response with \"quotes\" and \n newlines","done":true}""",
+          mockResponse =
+            """|{
+               |  "message": {
+               |    "role": "assistant",
+               |    "content": "Response with \"quotes\" and \n newlines"
+               |  }
+               |}"""
+              .trimMargin(),
           expectedResult = "Response with \"quotes\" and \n newlines",
         ),
       )
@@ -201,77 +217,63 @@ class ModelContextServiceTest {
   }
 
   @Test
-  fun `test generateSummary builds combined prompt with code and insights`() = runBlocking {
+  fun `test buildSummaryPrompt builds prompt with insights`() = runBlocking {
     // Arrange
     val testCases =
       listOf(
         SummaryTestCase(
-          name = "simple project",
-          codeStructure = mapOf("main.kt" to mapOf("language" to "kotlin")),
-          codeSnippets =
-            listOf(
-              """|File: main.kt
-                 |~~~kotlin
-                 |fun main() {}
-                 |~~~"""
-                .trimMargin()
-            ),
-          expectedPromptContains = listOf("Code Snippets:", "fun main() {}"),
+          name = "simple insights",
+          insights = "Basic code analysis with some insights",
+          expectedPromptContains = listOf("Structural Analysis:", "Basic code analysis with some insights"),
         ),
         SummaryTestCase(
-          name = "complex project",
-          codeStructure =
-            mapOf(
-              "src" to mapOf("main.kt" to mapOf("language" to "kotlin"), "util.kt" to mapOf("language" to "kotlin"))
-            ),
-          codeSnippets =
-            listOf(
-              """|File: src/main.kt
-                 |~~~kotlin
-                 |fun main() {}
-                 |~~~"""
-                .trimMargin(),
-              """|File: src/util.kt
-                 |~~~kotlin
-                 |fun util() {}
-                 |~~~"""
-                .trimMargin(),
-            ),
-          expectedPromptContains = listOf("Code Snippets:", "fun main() {}", "fun util() {}"),
+          name = "complex insights with file analysis",
+          insights =
+            """|### File: src/main.kt (Language: Kotlin)
+               |- **Purpose**: Main entry point
+               |- **Key Components**: main function
+               |
+               |### File: src/util.kt (Language: Kotlin)
+               |- **Purpose**: Utility functions
+               |"""
+              .trimMargin(),
+          expectedPromptContains = listOf("Structural Analysis:", "File: src/main.kt", "File: src/util.kt"),
         ),
-        SummaryTestCase(
-          name = "empty project",
-          codeStructure = emptyMap(),
-          codeSnippets = emptyList(),
-          expectedPromptContains = listOf("Code Snippets:"),
-        ),
+        SummaryTestCase(name = "empty insights", insights = "", expectedPromptContains = listOf("Structural Analysis:")),
       )
 
     testCases.forEach { testCase ->
-      val mockService = mockk<ModelContextService>()
-      coEvery { mockService.generateResponse(any()) } returns "Mocked summary response"
-      coEvery { mockService.buildSummaryPrompt(any(), any()) } coAnswers
-        {
-          val codeStructure = firstArg<Map<String, Any>>()
-          val codeSnippets = secondArg<List<String>>()
-
-          // Act
-          val prompt = service.buildSummaryPrompt(codeStructure, codeSnippets)
-
-          // Assert
-          testCase.expectedPromptContains.forEach { expected ->
-            assertTrue(prompt.contains(expected), "Prompt for test '${testCase.name}' should contain '$expected'")
-          }
-
-          "Mocked summary response"
-        }
-
       // Act
-      val summary = mockService.buildSummaryPrompt(testCase.codeStructure, testCase.codeSnippets)
+      val prompt = service.buildSummaryPrompt(testCase.insights)
 
       // Assert
-      assertEquals("Mocked summary response", summary)
-      coVerify { mockService.buildSummaryPrompt(testCase.codeStructure, testCase.codeSnippets) }
+      testCase.expectedPromptContains.forEach { expected ->
+        assertTrue(prompt.contains(expected), "Prompt for test '${testCase.name}' should contain '$expected'")
+      }
     }
+  }
+
+  @Test
+  fun `test parseInsights extracts file sections`() {
+    // Arrange
+    val insights =
+      """|Some general information
+         |
+         |### File: src/main.kt (Language: Kotlin)
+         |- **Purpose**: Main entry point
+         |
+         |### File: src/util.kt (Language: Kotlin)
+         |- **Purpose**: Utility functions
+         |"""
+        .trimMargin()
+
+    // Act
+    val parsedInsights = ModelContextService.parseInsights(insights)
+
+    // Assert
+    assertTrue(parsedInsights.startsWith("### File:"))
+    assertTrue(parsedInsights.contains("src/main.kt"))
+    assertTrue(parsedInsights.contains("src/util.kt"))
+    assertFalse(parsedInsights.contains("Some general information"))
   }
 }

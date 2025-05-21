@@ -7,11 +7,14 @@ import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
+import io.ktor.sse.ServerSentEvent
 import io.ktor.util.collections.*
 import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.server.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSink
 import kotlinx.io.asSource
@@ -27,7 +30,7 @@ import org.slf4j.LoggerFactory
  * Server for analyzing GitHub repositories using the Model Context Protocol (MCP). Provides functionalities for
  * analyzing GitHub repositories and checking analysis status.
  */
-open class Server(
+class Server(
   private val repositoryAnalysisService: RepositoryAnalysisService = RepositoryAnalysisService(),
   private val logger: Logger = LoggerFactory.getLogger(Server::class.java),
   private val implementation: Implementation =
@@ -66,20 +69,25 @@ open class Server(
    *
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
-  open fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
+  fun runSseMcpServerWithPlainConfiguration(port: Int): Unit = runBlocking {
     val servers = ConcurrentMap<String, SdkServer>()
     logger.info("Starting SSE server on port $port.")
     logger.info("Use inspector to connect to the http://localhost:$port/sse")
 
     embeddedServer(CIO, host = "0.0.0.0", port = port) {
         install(SSE)
+
         routing {
           sse("/sse") {
-            val transport = SseServerTransport("/message", this)
-            val server: SdkServer = configureServer()
+            launch {
+              while (true) {
+                send(ServerSentEvent(event = "heartbeat"))
+                delay(15_000)
+              }
+            }
 
-            // For SSE, you can also add prompts/tools/resources if needed:
-            // server.addTool(...), server.addPrompt(...), server.addResource(...)
+            val transport = SseServerTransport("/message", this)
+            val server = configureServer()
 
             servers[transport.sessionId] = server
 
@@ -90,16 +98,28 @@ open class Server(
 
             server.connect(transport)
           }
-          post("/message") {
-            logger.info("Received Message")
-            val sessionId: String = call.request.queryParameters["sessionId"]!!
-            val transport = servers[sessionId]?.transport as? SseServerTransport
-            if (transport == null) {
-              call.respond(HttpStatusCode.NotFound, "Session not found")
-              return@post
-            }
 
-            transport.handlePostMessage(call)
+          post("/message") {
+            try {
+
+              val sessionId =
+                call.request.queryParameters["sessionId"]
+                  ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing sessionId parameter")
+
+              val transport = servers[sessionId]?.transport as? SseServerTransport
+              if (transport == null) {
+                call.respond(HttpStatusCode.NotFound, "Session not found")
+                return@post
+              }
+
+              logger.debug("Handling message for session: $sessionId")
+              transport.handlePostMessage(call)
+
+              call.respond(HttpStatusCode.OK)
+            } catch (e: Exception) {
+              logger.error("Error handling message: ${e.message}", e)
+              call.respond(HttpStatusCode.InternalServerError, "Error handling message: ${e.message}")
+            }
           }
         }
       }
@@ -111,11 +131,16 @@ open class Server(
    *
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
-  open fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
-    logger.info("Starting SSE server on port $port")
-    logger.info("Use inspector to connect to http://localhost:$port/sse")
+  fun runSseMcpServerUsingKtorPlugin(port: Int): Unit = runBlocking {
+    logger.debug("Starting SSE server on port $port")
+    logger.debug("Use inspector to connect to http://localhost:$port/sse")
 
-    embeddedServer(CIO, host = "0.0.0.0", port = port) { mcp { configureServer() } }.start(wait = true)
+    embeddedServer(CIO, host = "0.0.0.0", port = port) {
+        mcp {
+          return@mcp configureServer()
+        }
+      }
+      .start(wait = true)
   }
 
   /**
@@ -123,7 +148,7 @@ open class Server(
    *
    * @return The configured MCP server instance.
    */
-  open fun configureServer(): SdkServer {
+  fun configureServer(): SdkServer {
     val server = SdkServer(implementation, serverOptions)
 
     server.addTool(
