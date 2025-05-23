@@ -10,8 +10,9 @@ plugins {
   kotlin("jvm") version "2.1.0"
   kotlin("plugin.serialization") version "2.1.0"
   id("com.diffplug.spotless") version "7.0.3"
-  id("pl.allegro.tech.build.axion-release") version "1.18.7"
+  id("io.kotest.multiplatform") version "5.0.2"
   id("org.jreleaser") version "1.17.0"
+  id("pl.allegro.tech.build.axion-release") version "1.18.7"
 }
 
 scmVersion {
@@ -28,6 +29,7 @@ description = "MCP Server for GitHub Code Repositories Analysis"
 dependencies {
   val ktorVersion = "3.0.2"
   val coroutinesVersion = "1.10.2"
+  val kotestVersion = "5.9.1"
 
   // Kotlin standard library
   implementation(kotlin("stdlib"))
@@ -63,6 +65,10 @@ dependencies {
   testImplementation("io.mockk:mockk:1.14.2")
   testImplementation("io.ktor:ktor-client-mock-jvm:$ktorVersion")
   testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion")
+
+  testImplementation("io.kotest:kotest-runner-junit5:$kotestVersion")
+  testImplementation("io.kotest:kotest-assertions-core:$kotestVersion")
+  testImplementation("io.kotest:kotest-property:$kotestVersion")
 }
 
 application { mainClass.set("MainKt") }

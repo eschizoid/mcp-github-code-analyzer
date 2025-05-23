@@ -7,16 +7,16 @@ import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
-import io.ktor.sse.ServerSentEvent
+import io.ktor.sse.*
 import io.ktor.util.collections.*
 import io.modelcontextprotocol.kotlin.sdk.*
-import io.modelcontextprotocol.kotlin.sdk.server.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
+import io.modelcontextprotocol.kotlin.sdk.server.SseServerTransport
+import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
+import io.modelcontextprotocol.kotlin.sdk.server.mcp
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.io.IOException
 import kotlinx.io.asSink
 import kotlinx.io.asSource
@@ -86,21 +86,21 @@ class Server(
             servers[transport.sessionId] = server
 
             val heartbeatJob = launch {
-              try {
-                while (true) {
-                  try {
-                    send(ServerSentEvent(event = "heartbeat"))
+              flow {
+                  while (true) {
+                    emit(Unit)
                     delay(15_000)
-                  } catch (e: IOException) {
-                    logger.debug("Client disconnected during heartbeat: ${e.message}")
-                    break // Exit the loop on pipe errors
                   }
                 }
-              } catch (e: Exception) {
-                logger.error("Heartbeat error: ${e.message}", e)
-              } finally {
-                logger.debug("Heartbeat job terminated for session: ${transport.sessionId}")
-              }
+                .onEach { send(ServerSentEvent(event = "heartbeat")) }
+                .catch { e ->
+                  when (e) {
+                    is IOException -> logger.debug("Client disconnected during heartbeat: ${e.message}")
+                    else -> logger.error("Heartbeat error: ${e.message}", e)
+                  }
+                }
+                .onCompletion { logger.debug("Heartbeat job terminated for session: ${transport.sessionId}") }
+                .collect()
             }
 
             server.onClose {
