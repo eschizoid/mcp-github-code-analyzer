@@ -30,7 +30,7 @@ class ServerTest {
     every {
       anyConstructed<SdkServer>()
         .addTool(name = any(), description = any(), inputSchema = any(), handler = capture(toolHandlerSlot))
-    } returns Unit // Assuming addTool returns Unit or the mock will handle it
+    } returns Unit
   }
 
   @AfterEach
@@ -40,56 +40,52 @@ class ServerTest {
 
   @Test
   fun `configureServer registers tool and handler processes success`() = runBlocking {
+    // Arrange
     val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val expectedSummary = "Analysis successful"
-
     coEvery { repositoryAnalysisService.analyzeRepository(repoUrl, branch) } returns expectedSummary
 
-    // Act: Call configureServer to trigger SdkServer instantiation and addTool
+    // Act
     serverUnderTest.configureServer()
 
-    // Verify that addTool was called on the (mocked) SdkServer with the correct tool name
     verify {
       anyConstructed<SdkServer>()
         .addTool(
           name = eq("analyze-repository"),
-          description = any(), // Can be more specific if needed
-          inputSchema = any(), // Can be more specific by creating the expected Tool.Input
+          description = any(),
+          inputSchema = any(),
           handler = toolHandlerSlot.captured,
         )
     }
 
-    // Prepare a request for the captured handler
     val request =
       CallToolRequest(
         arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl), "branch" to JsonPrimitive(branch))),
         name = "analyze-repository",
       )
-
-    // Invoke the captured handler directly
     val result = toolHandlerSlot.captured.invoke(request)
 
-    // Assert the handler's output
+    // Assert
     assertFalse(result.isError == true, "Result should not be an error on success")
     assertEquals(1, result.content.size)
     val textContent = result.content.first() as? TextContent
     assertNotNull(textContent, "Content should be TextContent")
     assertEquals(expectedSummary, textContent?.text)
-
-    // Verify the service was called correctly
     coVerify { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
   }
 
   @Test
   fun `tool handler processes repository analysis error`() = runBlocking {
+    // Arrange
     val repoUrl = "https://github.com/test/repo"
     val branch = "main"
     val errorMessage = "Failed to analyze due to network issue"
 
     coEvery { repositoryAnalysisService.analyzeRepository(repoUrl, branch) } throws Exception(errorMessage)
 
-    serverUnderTest.configureServer() // This captures the handler
+    // Act
+    serverUnderTest.configureServer()
 
     val request =
       CallToolRequest(
@@ -98,6 +94,7 @@ class ServerTest {
       )
     val result = toolHandlerSlot.captured.invoke(request)
 
+    // Assert
     assertTrue(result.isError == true, "Result should be an error")
     assertEquals(1, result.content.size)
     val textContent = result.content.first() as? TextContent
@@ -111,21 +108,14 @@ class ServerTest {
 
   @Test
   fun `tool handler processes missing repoUrl argument`() = runBlocking {
-    serverUnderTest.configureServer() // This captures the handler
+    // Act
+    serverUnderTest.configureServer()
 
     val request =
-      CallToolRequest(
-        arguments =
-          JsonObject(
-            mapOf(
-              // "repoUrl" is intentionally missing
-              "branch" to JsonPrimitive("main")
-            )
-          ),
-        name = "analyze-repository",
-      )
+      CallToolRequest(arguments = JsonObject(mapOf("branch" to JsonPrimitive("main"))), name = "analyze-repository")
     val result = toolHandlerSlot.captured.invoke(request)
 
+    // Assert
     assertTrue(result.isError == true, "Result should be an error for missing repoUrl")
     assertEquals(1, result.content.size)
     val textContent = result.content.first() as? TextContent
@@ -134,35 +124,25 @@ class ServerTest {
       textContent?.text?.contains("Error analyzing repository: Missing repoUrl parameter") == true,
       "Error message for missing repoUrl mismatch. Actual: ${textContent?.text}",
     )
-
-    // Ensure the analysis service was not called
     coVerify(exactly = 0) { repositoryAnalysisService.analyzeRepository(any(), any()) }
   }
 
   @Test
   fun `tool handler uses default branch if not provided`() = runBlocking {
+    // Arrange
     val repoUrl = "https://github.com/test/repo"
-    val defaultBranch = "main" // As defined in the handler logic
+    val defaultBranch = "main"
     val expectedSummary = "Analysis with default branch successful"
-
-    // Expect the service to be called with the default branch
     coEvery { repositoryAnalysisService.analyzeRepository(repoUrl, defaultBranch) } returns expectedSummary
 
-    serverUnderTest.configureServer() // This captures the handler
+    // Act
+    serverUnderTest.configureServer()
 
     val request =
-      CallToolRequest(
-        arguments =
-          JsonObject(
-            mapOf(
-              "repoUrl" to JsonPrimitive(repoUrl)
-              // "branch" is intentionally missing
-            )
-          ),
-        name = "analyze-repository",
-      )
+      CallToolRequest(arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl))), name = "analyze-repository")
     val result = toolHandlerSlot.captured.invoke(request)
 
+    // Assert
     assertFalse(result.isError == true, "Result should not be an error when using default branch")
     assertEquals(1, result.content.size)
     val textContent = result.content.first() as? TextContent

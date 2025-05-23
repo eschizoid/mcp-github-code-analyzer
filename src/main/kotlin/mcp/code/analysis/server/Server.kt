@@ -13,9 +13,11 @@ import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.server.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.io.IOException
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
@@ -79,17 +81,27 @@ class Server(
 
         routing {
           sse("/sse") {
-            launch {
-              while (true) {
-                send(ServerSentEvent(event = "heartbeat"))
-                delay(15_000)
-              }
-            }
-
             val transport = SseServerTransport("/message", this)
             val server = configureServer()
-
             servers[transport.sessionId] = server
+
+            val heartbeatJob = launch {
+              try {
+                while (true) {
+                  try {
+                    send(ServerSentEvent(event = "heartbeat"))
+                    delay(15_000)
+                  } catch (e: IOException) {
+                    logger.debug("Client disconnected during heartbeat: ${e.message}")
+                    break // Exit the loop on pipe errors
+                  }
+                }
+              } catch (e: Exception) {
+                logger.error("Heartbeat error: ${e.message}", e)
+              } finally {
+                logger.debug("Heartbeat job terminated for session: ${transport.sessionId}")
+              }
+            }
 
             server.onClose {
               logger.info("Server closed")
@@ -97,6 +109,13 @@ class Server(
             }
 
             server.connect(transport)
+
+            try {
+              awaitCancellation()
+            } finally {
+              heartbeatJob.cancel()
+              logger.info("SSE connection closed for session: ${transport.sessionId}")
+            }
           }
 
           post("/message") {
