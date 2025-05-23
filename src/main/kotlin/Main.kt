@@ -37,9 +37,10 @@ data class AppCommand(val type: CommandType, val port: Int)
 
 /**
  * Enum representing the application command type.
- *
- * STDIO - Standard input/output mode for the MCP server SSE_KTOR - Server-Sent Events mode using the Ktor plugin
- * SSE_PLAIN - Server-Sent Events mode using plain configuration UNKNOWN - Unknown or unsupported command
+ * * STDIO - Standard input/output mode for the MCP server
+ * * SSE_KTOR - Server-Sent Events mode using the Ktor plugin
+ * * SSE_PLAIN - Server-Sent Events mode using plain configuration
+ * * UNKNOWN - Unknown or unsupported command
  */
 enum class CommandType {
   STDIO,
@@ -67,13 +68,13 @@ enum class CommandType {
 }
 
 /**
- * Runs the application by parsing arguments, ensuring necessary directories exist, and executing the appropriate server
- * command.
+ * Runs the application by parsing arguments, ensuring the necessary directories exist, and executing the appropriate
+ * server command.
  *
  * @param args Command-line arguments to determine server behavior.
  * @return Result wrapping Unit, with success if the application runs successfully, or failure with the exception if an
  *   error occurs.
- * @throws IOException If required directories cannot be created.
+ * @throws IOException If the required directories cannot be created.
  */
 fun runApplication(args: Array<String>): Result<Unit> = runCatching {
   val logger = LoggerFactory.getLogger("Main")

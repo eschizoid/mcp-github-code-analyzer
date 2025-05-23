@@ -195,7 +195,7 @@ class CodeAnalyzerTest {
       }
 
       // Act
-      val snippets = analyzer.collectAllCodeSnippets(tempDir)
+      val snippets = analyzer.collectSummarizedCodeSnippets(tempDir)
 
       // Assert
       assertEquals(

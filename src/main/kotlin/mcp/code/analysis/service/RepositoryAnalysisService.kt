@@ -19,7 +19,7 @@ data class RepositoryAnalysisService(
       val repoDir = gitService.cloneRepository(repoUrl, branch)
 
       val readme = codeAnalyzer.findReadmeFile(repoDir)
-      val codeSnippets = codeAnalyzer.collectAllCodeSnippets(repoDir)
+      val codeSnippets = codeAnalyzer.collectSummarizedCodeSnippets(repoDir)
 
       val insightsPrompt = modelContextService.buildInsightsPrompt(codeSnippets, readme)
       val insightsResponse = modelContextService.generateResponse(insightsPrompt)

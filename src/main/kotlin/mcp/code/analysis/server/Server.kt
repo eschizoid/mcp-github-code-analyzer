@@ -7,15 +7,17 @@ import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
-import io.ktor.sse.ServerSentEvent
+import io.ktor.sse.*
 import io.ktor.util.collections.*
 import io.modelcontextprotocol.kotlin.sdk.*
-import io.modelcontextprotocol.kotlin.sdk.server.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
+import io.modelcontextprotocol.kotlin.sdk.server.SseServerTransport
+import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
+import io.modelcontextprotocol.kotlin.sdk.server.mcp
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.io.IOException
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
@@ -79,17 +81,27 @@ class Server(
 
         routing {
           sse("/sse") {
-            launch {
-              while (true) {
-                send(ServerSentEvent(event = "heartbeat"))
-                delay(15_000)
-              }
-            }
-
             val transport = SseServerTransport("/message", this)
             val server = configureServer()
-
             servers[transport.sessionId] = server
+
+            val heartbeatJob = launch {
+              flow {
+                  while (true) {
+                    emit(Unit)
+                    delay(15_000)
+                  }
+                }
+                .onEach { send(ServerSentEvent(event = "heartbeat")) }
+                .catch { e ->
+                  when (e) {
+                    is IOException -> logger.debug("Client disconnected during heartbeat: ${e.message}")
+                    else -> logger.error("Heartbeat error: ${e.message}", e)
+                  }
+                }
+                .onCompletion { logger.debug("Heartbeat job terminated for session: ${transport.sessionId}") }
+                .collect()
+            }
 
             server.onClose {
               logger.info("Server closed")
@@ -97,6 +109,13 @@ class Server(
             }
 
             server.connect(transport)
+
+            try {
+              awaitCancellation()
+            } finally {
+              heartbeatJob.cancel()
+              logger.info("SSE connection closed for session: ${transport.sessionId}")
+            }
           }
 
           post("/message") {

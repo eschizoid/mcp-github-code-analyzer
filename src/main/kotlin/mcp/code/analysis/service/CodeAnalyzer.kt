@@ -1,8 +1,18 @@
 package mcp.code.analysis.service
 
 import java.io.File
+import kotlin.text.lines
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+
+data class LanguagePatterns(
+  val definitionPattern: Regex,
+  val commentPrefixes: List<String>,
+  val blockCommentStart: String,
+  val blockCommentEnd: String,
+)
+
+data class State(val lines: List<String> = emptyList(), val inCommentBlock: Boolean = false)
 
 /**
  * Responsible for analyzing the structure of a codebase. Identifies files, directories, and their respective metadata
@@ -23,36 +33,181 @@ data class CodeAnalyzer(
   fun analyzeStructure(repoDir: File): Map<String, Any> = processDirectory(repoDir, repoDir.absolutePath)
 
   /**
-   * Collects all code snippets from the repository.
+   * Collects summarized code snippets from the repository.
    *
    * @param repoDir The root directory of the repository
-   * @return List of code snippets with metadata including file path and language
+   * @param maxLines The maximum number of lines to include per file summary
+   * @return List of code summaries with metadata
    */
-  fun collectAllCodeSnippets(repoDir: File): List<String> =
+  fun collectSummarizedCodeSnippets(repoDir: File, maxLines: Int = 100): List<String> =
     findCodeFiles(repoDir)
       .filter { file ->
-        file.extension.lowercase() in setOf("kt", "java", "scala", "py", "rb", "js", "ts", "go", "c", "cpp", "rust") &&
+        file.extension.lowercase() in setOf("kt", "java", "scala", "py", "rb", "js", "ts", "go", "c", "cpp", "rs") &&
           !file.absolutePath.contains("test", ignoreCase = true)
       }
       .map { file ->
-        val relativePath = file.absolutePath.substring(repoDir.absolutePath.length + 1)
+        val relativePath = file.absolutePath.removePrefix(repoDir.absolutePath).removePrefix("/")
         val lang = getLanguageFromExtension(file.extension)
-        val content = file.readLines().joinToString("\n")
-        """|--- File: $relativePath
-           |~~~$lang
-           |$content
-           |~~~"""
-          .trimMargin()
+        val content = file.readText()
+        summarizeCodeContent(relativePath, lang, content, maxLines)
       }
-      .toList()
       .also { snippets ->
-        logger.info("Collected ${snippets.size} code snippets from ${repoDir.absolutePath}")
+        logger.info("Collected ${snippets.size} summarized snippets from ${repoDir.absolutePath}")
         logger.debug(
           """|Snippets Found:
-             |${snippets.joinToString("\n")}"""
+             |${snippets.joinToString("\n")}
+             |"""
             .trimMargin()
         )
       }
+
+  /**
+   * Summarizes the content of a file.
+   *
+   * @param path The path of the file
+   * @param language The language of the file
+   * @param content The content of the file
+   * @param maxLines The maximum number of lines to include in the summary
+   */
+  fun summarizeCodeContent(path: String, language: String, content: String, maxLines: Int = 250): String {
+
+    val patterns =
+      when (language.lowercase()) {
+        "kotlin" ->
+          LanguagePatterns(
+            Regex(
+              """(class|interface|object|enum class|data class|sealed class|fun|val|var|const|typealias|annotation class).*"""
+            ),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        "scala" ->
+          LanguagePatterns(
+            Regex(
+              """(class|object|trait|case class|case object|def|val|var|lazy val|type|implicit|sealed|abstract|override|package object).*"""
+            ),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        "java" ->
+          LanguagePatterns(
+            Regex(
+              """(class|interface|enum|@interface|record|public|private|protected|static|abstract|final|synchronized|volatile|native|transient|strictfp).*"""
+            ),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        "python" ->
+          LanguagePatterns(Regex("""(def|class|async def|@|import|from).*"""), listOf("#"), "\"\"\"", "\"\"\"")
+
+        "ruby" ->
+          LanguagePatterns(
+            Regex("""(def|class|module|attr_|require|include|extend).*"""),
+            listOf("#"),
+            "=begin",
+            "=end",
+          )
+
+        "javascript",
+        "typescript" ->
+          LanguagePatterns(
+            Regex("""(function|class|const|let|var|import|export|interface|type|enum|namespace).*"""),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        "go" ->
+          LanguagePatterns(
+            Regex("""(func|type|struct|interface|package|import|var|const).*"""),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        "rust" ->
+          LanguagePatterns(
+            Regex("""(fn|struct|enum|trait|impl|pub|use|mod|const|static|type|async|unsafe).*"""),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        "c",
+        "cpp" ->
+          LanguagePatterns(
+            Regex("""(class|struct|enum|typedef|namespace|template|void|int|char|bool|auto|extern|static|virtual).*"""),
+            listOf("//"),
+            "/*",
+            "*/",
+          )
+
+        // Default fallback for other languages
+        else ->
+          LanguagePatterns(
+            Regex("""(class|interface|object|enum|fun|def|function|public|private|protected|static).*"""),
+            listOf("//", "#"),
+            "/*",
+            "*/",
+          )
+      }
+
+    val definitionPattern = patterns.definitionPattern
+    val commentPrefixes = patterns.commentPrefixes
+    val blockCommentStart = patterns.blockCommentStart
+    val blockCommentEnd = patterns.blockCommentEnd
+
+    val isDefinition: (String) -> Boolean = { line -> line.trim().matches(definitionPattern) }
+
+    val isCommentLine: (String) -> Boolean = { line ->
+      val trimmed = line.trim()
+      commentPrefixes.any { trimmed.startsWith(it) } || trimmed.startsWith(blockCommentStart) || trimmed.startsWith("*")
+    }
+
+    val processDefinitionLine: (String) -> String = { line ->
+      val trimmed = line.trim()
+      if (trimmed.contains("{") && !trimmed.contains("}")) "$trimmed }" else trimmed
+    }
+
+    val finalState =
+      content.lines().fold(State()) { state, line ->
+        if (state.lines.size >= maxLines) return@fold state
+        val trimmed = line.trim()
+        val nextInCommentBlock =
+          when {
+            trimmed.startsWith(blockCommentStart) -> true
+            trimmed.endsWith(blockCommentEnd) -> false
+            language.lowercase() == "python" && trimmed == "\"\"\"" -> !state.inCommentBlock
+            else -> state.inCommentBlock
+          }
+
+        val shouldIncludeLine = isDefinition(line) || isCommentLine(line) || state.inCommentBlock
+        val updatedLines =
+          if (shouldIncludeLine) {
+            if (isDefinition(line)) {
+              // Apply processing to definition lines to ensure braces are complete
+              state.lines + processDefinitionLine(line)
+            } else {
+              state.lines + line
+            }
+          } else state.lines
+
+        State(updatedLines, nextInCommentBlock)
+      }
+
+    // Ensure we're using the correct file path and language
+    return """|### File: $path
+              |~~~$language
+              |${finalState.lines.joinToString("\n")}
+              |~~~"""
+      .trimMargin()
+  }
 
   /**
    * Finds the README file in the repository.
