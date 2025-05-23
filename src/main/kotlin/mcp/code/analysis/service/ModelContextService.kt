@@ -93,41 +93,41 @@ data class ModelContextService(
    * @return A structured prompt for the model
    */
   fun buildInsightsPrompt(codeSnippets: List<String>, readme: String) =
-    """"|You are analyzing a software codebase that includes a README file and source code files. Your task is to extract a **factual, grounded summary** of the codebase’s architecture, components, and relationships.
-        |
-        |Use only the information provided below. **Do not assume or invent any technologies, libraries, or architecture styles** unless explicitly mentioned.
-        |
-        |----------------------
-        |README Content:
-        |
-        |~~~markdown
-        |${readme.replace("```", "~~~")}
-        |~~~
-        |
-        |----------------------
-        |Code Snippets:
-        |
-        |${codeSnippets.joinToString("\n\n")}
-        |----------------------
-        |
-        |For each file:
-        |- File name and language
-        |- Main classes, functions, or data structures
-        |- Purpose of the file (based on comments, function names, etc.)
-        |- Key public interfaces (functions, methods, classes)
-        |- If applicable, how this file connects to other parts of the codebase (e.g. imports, API usage, function calls)
-        |
-        |Use this format:
-        |
-        |### File: path/to/file.ext (Language: X)
-        |- **Purpose**: ...
-        |- **Key Components**:
-        |  - ...
-        |- **Relationships**:
-        |  - ...
-        |
-        |Repeat this for all files. Avoid speculation. Be concise and **base your answers strictly on the content above**.
-        |"""
+    """|You are analyzing a software codebase that includes a README file and source code files. Your task is to extract a **factual, structured summary** of the codebase’s architecture, components, and relationships.
+       |
+       |Use only the information provided below. **Do not assume or invent any technologies, libraries, or architecture styles** unless they are explicitly stated in the content.
+       |
+       |----------------------
+       |README Content:
+       |
+       |~~~markdown
+       |${readme.replace("```", "~~~")}
+       |~~~
+       |
+       |----------------------
+       |Code Snippets:
+       |
+       |${codeSnippets.joinToString("\n\n")}
+       |----------------------
+       |
+       |For each file, identify:
+       |- File name and programming language
+       |- Main classes, functions, or data structures
+       |- Purpose of the file (based on code and comments)
+       |- Key public interfaces (e.g., functions, methods, classes)
+       |- If applicable, how the file connects to other files (e.g., imports, calls, shared data structures)
+       |
+       |Use this format:
+       |
+       |### File: path/to/file.ext (Language: X)
+       |- **Purpose**: ...
+       |- **Key Components**:
+       |  - ...
+       |- **Relationships**:
+       |  - ...
+       |
+       |Repeat for all files. Be concise. Avoid speculation or generalization. Stay grounded in the actual code and README.
+       |"""
       .trimMargin()
 
   /**
@@ -137,10 +137,9 @@ data class ModelContextService(
    * @return A structured prompt for the model
    */
   fun buildSummaryPrompt(insights: String): String =
-    """|You are writing a high-level but technically accurate summary of a software codebase for a developer unfamiliar with the project.
+    """|You are writing a high-level yet technically accurate summary of a software codebase. Your audience is a developer unfamiliar with the project.
        |
-       |Use the extracted structural analysis below to build the summary.
-       |**Do not add new interpretations, architecture styles, or technologies that are not explicitly mentioned.**
+       |Use the structural analysis below. **Base your summary strictly on what is stated**—do not speculate or introduce external technologies or patterns unless clearly mentioned.
        |
        |----------------------
        |
@@ -149,15 +148,15 @@ data class ModelContextService(
        |${parseInsights(insights)}
        |----------------------
        |
-       |You must include:
+       |Include the following sections:
        |
-       |1. **Main Purpose** – what the software does, who might use it.
-       |2. **Architecture Overview** – actual components and how they interact (based on the structural analysis).
-       |3. **Technologies and Languages** – only those found in the code or README.
-       |4. **Key Workflows** – specific flows (e.g., "HTTP request -> controller -> database"). Avoid generalizing.
-       |5. **Strengths and Weaknesses** – grounded in code structure or relationships.
+       |1. **Main Purpose** – what the software does and its target users.
+       |2. **Architecture Overview** – actual components and how they interact.
+       |3. **Technologies and Languages** – only list what's confirmed in the code or README.
+       |4. **Key Workflows** – describe specific processing or control flows (e.g., "HTTP request -> controller -> database").
+       |5. **Strengths and Weaknesses** – mention design trade-offs (e.g., modularity, coupling, extensibility) based on the structure.
        |
-       |Avoid making assumptions. **Quote classes or method names** where helpful. Use Markdown formatting.
+       |Avoid making assumptions. Use quotes or references to method/class names where helpful. Format the output using Markdown. Be concise and accurate.
        |"""
       .trimMargin()
 

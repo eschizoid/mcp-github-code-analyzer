@@ -52,7 +52,7 @@ class RepositoryAnalysisServiceTest {
     // Mock behavior
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readme
-    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
+    every { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) } returns codeSnippets
     every { modelContextService.buildInsightsPrompt(codeSnippets, readme) } returns insightsPrompt
     coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
     every { modelContextService.buildSummaryPrompt(insightsResponse) } returns summaryPrompt
@@ -65,7 +65,7 @@ class RepositoryAnalysisServiceTest {
     assertEquals(summaryResponse, result)
     verify { gitService.cloneRepository(repoUrl, branch) }
     verify { codeAnalyzer.findReadmeFile(clonedRepo) }
-    verify { codeAnalyzer.collectAllCodeSnippets(clonedRepo) }
+    verify { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) }
     verify { modelContextService.buildInsightsPrompt(codeSnippets, readme) }
     verify { modelContextService.buildSummaryPrompt(insightsResponse) }
   }
@@ -96,7 +96,7 @@ class RepositoryAnalysisServiceTest {
 
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns "README content"
-    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } throws Exception(errorMessage)
+    every { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) } throws Exception(errorMessage)
 
     // Act & Assert
     val exception = assertThrows<Exception> { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
@@ -118,7 +118,7 @@ class RepositoryAnalysisServiceTest {
 
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readme
-    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
+    every { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) } returns codeSnippets
     every { modelContextService.buildInsightsPrompt(codeSnippets, readme) } returns insightsPrompt
     coEvery { modelContextService.generateResponse(insightsPrompt) } throws Exception(errorMessage)
 
@@ -145,7 +145,7 @@ class RepositoryAnalysisServiceTest {
     // Mock behavior
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns readme
-    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns emptyCodeSnippets
+    every { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) } returns emptyCodeSnippets
     every { modelContextService.buildInsightsPrompt(emptyCodeSnippets, readme) } returns insightsPrompt
     coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
     every { modelContextService.buildSummaryPrompt(insightsResponse) } returns summaryPrompt
@@ -156,7 +156,7 @@ class RepositoryAnalysisServiceTest {
 
     // Assert
     assertEquals(summaryResponse, result)
-    verify { codeAnalyzer.collectAllCodeSnippets(clonedRepo) }
+    verify { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) }
     verify { modelContextService.buildInsightsPrompt(emptyCodeSnippets, readme) }
   }
 
@@ -176,7 +176,7 @@ class RepositoryAnalysisServiceTest {
     // Mock behavior
     every { gitService.cloneRepository(repoUrl, branch) } returns clonedRepo
     every { codeAnalyzer.findReadmeFile(clonedRepo) } returns noReadme
-    every { codeAnalyzer.collectAllCodeSnippets(clonedRepo) } returns codeSnippets
+    every { codeAnalyzer.collectSummarizedCodeSnippets(clonedRepo) } returns codeSnippets
     every { modelContextService.buildInsightsPrompt(codeSnippets, noReadme) } returns insightsPrompt
     coEvery { modelContextService.generateResponse(insightsPrompt) } returns insightsResponse
     every { modelContextService.buildSummaryPrompt(insightsResponse) } returns summaryPrompt
