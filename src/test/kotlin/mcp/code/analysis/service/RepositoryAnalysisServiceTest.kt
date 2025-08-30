@@ -8,6 +8,7 @@ import java.io.File
 import java.lang.Exception
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.runTest
+import mcp.code.analysis.processor.CodeAnalyzer
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

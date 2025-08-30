@@ -60,6 +60,8 @@ dependencies {
   // JGit for repository interaction
   implementation("org.eclipse.jgit:org.eclipse.jgit:7.2.1.202505142326-r")
 
+  implementation("io.github.tree-sitter:ktreesitter-jvm:0.24.1")
+
   // Testing
   testImplementation(kotlin("test"))
   testImplementation("io.mockk:mockk:1.14.2")

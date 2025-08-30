@@ -1,5 +1,7 @@
 package mcp.code.analysis.service
 
+import mcp.code.analysis.processor.CodeAnalyzer
+
 /** Service for analyzing Git repositories. */
 data class RepositoryAnalysisService(
   private val gitService: GitService = GitService(),

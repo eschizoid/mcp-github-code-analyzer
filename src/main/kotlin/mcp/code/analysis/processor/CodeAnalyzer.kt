@@ -1,7 +1,8 @@
-package mcp.code.analysis.service
+package mcp.code.analysis.processor
 
 import java.io.File
 import kotlin.text.lines
+import mcp.code.analysis.service.ModelContextService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -189,15 +190,9 @@ data class CodeAnalyzer(
 
         val shouldIncludeLine = isDefinition(line) || isCommentLine(line) || state.inCommentBlock
         val updatedLines =
-          if (shouldIncludeLine) {
-            if (isDefinition(line)) {
-              // Apply processing to definition lines to ensure braces are complete
-              state.lines + processDefinitionLine(line)
-            } else {
-              state.lines + line
-            }
-          } else state.lines
-
+          if (shouldIncludeLine)
+            if (isDefinition(line)) state.lines + processDefinitionLine(line) else state.lines + line
+          else state.lines
         State(updatedLines, nextInCommentBlock)
       }
 

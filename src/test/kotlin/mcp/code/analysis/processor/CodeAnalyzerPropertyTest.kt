@@ -1,10 +1,12 @@
-package mcp.code.analysis.service
+package mcp.code.analysis.processor
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.property.Arb
-import io.kotest.property.arbitrary.*
+import io.kotest.property.arbitrary.arbitrary
+import io.kotest.property.arbitrary.map
+import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import io.mockk.mockk
 import org.slf4j.Logger
@@ -16,7 +18,7 @@ class CodeAnalyzerPropertyTest :
 
     // Generate valid file paths
     fun getPathGenerator(language: String) =
-      Arb.string(1..50).map { base ->
+      Arb.Companion.string(1..50).map { base ->
         val validPath = base.replace(Regex("[^a-zA-Z0-9/._-]"), "_")
         val extension =
           when (language) {
@@ -326,12 +328,14 @@ class CodeAnalyzerPropertyTest :
               result.shouldContain("// This is a comment")
               result.shouldContain("/* Block comment")
             }
+
             "java" -> {
               result.shouldContain("public class TestClass")
               result.shouldContain("interface TestInterface")
               result.shouldContain("// This is a comment")
               result.shouldContain("/* Block comment")
             }
+
             "scala" -> {
               result.shouldContain("class TestClass")
               result.shouldContain("def testMethod")
@@ -339,17 +343,20 @@ class CodeAnalyzerPropertyTest :
               result.shouldContain("trait TestTrait")
               result.shouldContain("// This is a comment")
             }
+
             "python" -> {
               result.shouldContain("def test_function")
               result.shouldContain("class TestClass")
               result.shouldContain("# This is a comment")
             }
+
             "ruby" -> {
               result.shouldContain("def test_method")
               result.shouldContain("class TestClass")
               result.shouldContain("module TestModule")
               result.shouldContain("# This is a comment")
             }
+
             "javascript",
             "typescript" -> {
               result.shouldContain("function testFunction")
@@ -357,12 +364,14 @@ class CodeAnalyzerPropertyTest :
               result.shouldContain("const arrowFn")
               result.shouldContain("// This is a comment")
             }
+
             "go" -> {
               result.shouldContain("func testFunction")
               result.shouldContain("type TestStruct struct")
               result.shouldContain("type TestInterface interface")
               result.shouldContain("// This is a comment")
             }
+
             "c",
             "cpp" -> {
               result.shouldContain("void testFunction")
@@ -370,6 +379,7 @@ class CodeAnalyzerPropertyTest :
               result.shouldContain("class TestClass")
               result.shouldContain("// This is a comment")
             }
+
             "rust" -> {
               result.shouldContain("fn test_function")
               result.shouldContain("struct TestStruct")
