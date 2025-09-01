@@ -7,10 +7,10 @@ plugins {
   `maven-publish`
   signing
   jacoco
-  kotlin("jvm") version "2.1.0"
-  kotlin("plugin.serialization") version "2.1.0"
+  kotlin("jvm") version "2.2.10"
+  kotlin("plugin.serialization") version "2.2.10"
   id("com.diffplug.spotless") version "7.0.3"
-  id("io.kotest.multiplatform") version "5.0.2"
+  id("io.kotest.multiplatform") version "5.9.1"
   id("org.jreleaser") version "1.17.0"
   id("pl.allegro.tech.build.axion-release") version "1.18.7"
 }
@@ -27,9 +27,10 @@ version = rootProject.scmVersion.version
 description = "MCP Server for GitHub Code Repositories Analysis"
 
 dependencies {
-  val ktorVersion = "3.0.2"
+  val ktorVersion = "3.2.0"
   val coroutinesVersion = "1.10.2"
   val kotestVersion = "5.9.1"
+  val mcpKotlinSdk = "0.6.0"
 
   // Kotlin standard library
   implementation(kotlin("stdlib"))
@@ -45,7 +46,7 @@ dependencies {
   implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
 
   // MCP SDK
-  implementation("io.modelcontextprotocol:kotlin-sdk:0.5.0")
+  implementation("io.modelcontextprotocol:kotlin-sdk:$mcpKotlinSdk")
 
   // Logging
   implementation("ch.qos.logback:logback-classic:1.5.18")

@@ -18,7 +18,7 @@ class CodeAnalyzerPropertyTest :
 
     // Generate valid file paths
     fun getPathGenerator(language: String) =
-      Arb.Companion.string(1..50).map { base ->
+      Arb.string(1..50).map { base ->
         val validPath = base.replace(Regex("[^a-zA-Z0-9/._-]"), "_")
         val extension =
           when (language) {

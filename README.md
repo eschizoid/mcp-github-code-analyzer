@@ -38,7 +38,7 @@ A Kotlin server application that analyzes GitHub repositories using AI models th
 4. Start the MCP Inspector:
 
   ```bash
-  npx @modelcontextprotocol/inspector
+  npx @modelcontextprotocol/inspector@0.16.2
   ```
 
 5. You can access the MCP Inspector at `http://127.0.0.1:6274/` and configure the `Arguments` to start the server:
