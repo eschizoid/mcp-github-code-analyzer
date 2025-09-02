@@ -14,16 +14,16 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
-class ServerTest {
+class McpTest {
   private lateinit var repositoryAnalysisService: RepositoryAnalysisService
-  private lateinit var serverUnderTest: Server
+  private lateinit var serverUnderTest: Mcp
 
   private val toolHandlerSlot = slot<suspend (CallToolRequest) -> CallToolResult>()
 
   @BeforeEach
   fun setUp() {
     repositoryAnalysisService = mockk()
-    serverUnderTest = Server(repositoryAnalysisService = repositoryAnalysisService)
+    serverUnderTest = Mcp(repositoryAnalysisService = repositoryAnalysisService)
 
     mockkConstructor(SdkServer::class)
 
