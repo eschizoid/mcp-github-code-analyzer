@@ -10,9 +10,9 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOGS_DIRECTORY:-/tmp/mcp-github-code-analyzer/logs}/mcp.log</file>
+        <file>${LOGS_DIRECTORY:-/tmp/mcp-github-code-analyzer/logs/mcp.log}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOGS_DIRECTORY:-/tmp/mcp-github-code-analyzer/logs}/mcp.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${LOGS_DIRECTORY:-/tmp/mcp-github-code-analyzer/logs/mcp.%d{yyyy-MM-dd}.log}</fileNamePattern>
             <maxHistory>14</maxHistory>
         </rollingPolicy>
         <encoder>

@@ -13,239 +13,35 @@ data class LanguagePatterns(
   val blockCommentEnd: String,
 )
 
-data class State(val lines: List<String> = emptyList(), val inCommentBlock: Boolean = false)
+data class ProcessingState(val lines: List<String> = emptyList(), val inCommentBlock: Boolean = false)
 
 /**
  * Responsible for analyzing the structure of a codebase. Identifies files, directories, and their respective metadata
  * such as size, language, imports, and declarations.
  */
 data class CodeAnalyzer(
-  private val binaryFileSizeThreshold: Long = 1024 * 1024, // 1MB
-  private val binaryDetectionThreshold: Double = 0.05,
+  private val binaryFileSizeThreshold: Long = DEFAULT_BINARY_SIZE_THRESHOLD,
+  private val binaryDetectionThreshold: Double = DEFAULT_BINARY_DETECTION_THRESHOLD,
   private val logger: Logger = LoggerFactory.getLogger(ModelContextService::class.java),
 ) {
+  companion object {
+    private const val DEFAULT_MAX_LINES = 100
+    private const val SUMMARY_MAX_LINES = 500
+    private const val DEFAULT_BINARY_SIZE_THRESHOLD = 1024 * 1024L // 1MB
+    private const val DEFAULT_BINARY_DETECTION_THRESHOLD = 0.05
 
-  /**
-   * Collects summarized code snippets from the repository.
-   *
-   * @param repoDir The root directory of the repository
-   * @param maxLines The maximum number of lines to include per file summary
-   * @return List of code summaries with metadata
-   */
-  fun collectSummarizedCodeSnippets(repoDir: File, maxLines: Int = 100): List<String> =
-    findCodeFiles(repoDir)
-      .filter { file ->
-        file.extension.lowercase() in setOf("kt", "java", "scala", "py", "rb", "js", "ts", "go", "c", "cpp", "rs") &&
-          !file.absolutePath.contains("test", ignoreCase = true)
-      }
-      .map { file ->
-        val relativePath = file.absolutePath.removePrefix(repoDir.absolutePath).removePrefix("/")
-        val lang = getLanguageFromExtension(file.extension)
-        val content = file.readText()
-        summarizeCodeContent(relativePath, lang, content, maxLines)
-      }
-      .also { snippets ->
-        logger.info("Collected ${snippets.size} summarized snippets from ${repoDir.absolutePath}")
-        logger.debug(
-          """|Snippets Found:
-             |${snippets.joinToString("\n")}
-             |"""
-            .trimMargin()
-        )
-      }
+    private val README_FILENAMES =
+      listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt", "README.rst", "README", "readme")
 
-  /**
-   * Summarizes the content of a file.
-   *
-   * @param path The path of the file
-   * @param language The language of the file
-   * @param content The content of the file
-   * @param maxLines The maximum number of lines to include in the summary
-   */
-  fun summarizeCodeContent(path: String, language: String, content: String, maxLines: Int = 250): String {
+    private val SUPPORTED_EXTENSIONS = setOf("kt", "java", "scala", "py", "rb", "js", "ts", "go", "c", "cpp", "rs")
 
-    val patterns =
-      when (language.lowercase()) {
-        "kotlin" ->
-          LanguagePatterns(
-            Regex(
-              """(class|interface|object|enum class|data class|sealed class|fun|val|var|const|typealias|annotation class).*"""
-            ),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        "scala" ->
-          LanguagePatterns(
-            Regex(
-              """(class|object|trait|case class|case object|def|val|var|lazy val|type|implicit|sealed|abstract|override|package object).*"""
-            ),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        "java" ->
-          LanguagePatterns(
-            Regex(
-              """(class|interface|enum|@interface|record|public|private|protected|static|abstract|final|synchronized|volatile|native|transient|strictfp).*"""
-            ),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        "python" ->
-          LanguagePatterns(Regex("""(def|class|async def|@|import|from).*"""), listOf("#"), "\"\"\"", "\"\"\"")
-
-        "ruby" ->
-          LanguagePatterns(
-            Regex("""(def|class|module|attr_|require|include|extend).*"""),
-            listOf("#"),
-            "=begin",
-            "=end",
-          )
-
-        "javascript",
-        "typescript" ->
-          LanguagePatterns(
-            Regex("""(function|class|const|let|var|import|export|interface|type|enum|namespace).*"""),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        "go" ->
-          LanguagePatterns(
-            Regex("""(func|type|struct|interface|package|import|var|const).*"""),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        "rust" ->
-          LanguagePatterns(
-            Regex("""(fn|struct|enum|trait|impl|pub|use|mod|const|static|type|async|unsafe).*"""),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        "c",
-        "cpp" ->
-          LanguagePatterns(
-            Regex("""(class|struct|enum|typedef|namespace|template|void|int|char|bool|auto|extern|static|virtual).*"""),
-            listOf("//"),
-            "/*",
-            "*/",
-          )
-
-        // Default fallback for other languages
-        else ->
-          LanguagePatterns(
-            Regex("""(class|interface|object|enum|fun|def|function|public|private|protected|static).*"""),
-            listOf("//", "#"),
-            "/*",
-            "*/",
-          )
-      }
-
-    val definitionPattern = patterns.definitionPattern
-    val commentPrefixes = patterns.commentPrefixes
-    val blockCommentStart = patterns.blockCommentStart
-    val blockCommentEnd = patterns.blockCommentEnd
-
-    val isDefinition: (String) -> Boolean = { line -> line.trim().matches(definitionPattern) }
-
-    val isCommentLine: (String) -> Boolean = { line ->
-      val trimmed = line.trim()
-      commentPrefixes.any { trimmed.startsWith(it) } || trimmed.startsWith(blockCommentStart) || trimmed.startsWith("*")
-    }
-
-    val processDefinitionLine: (String) -> String = { line ->
-      val trimmed = line.trim()
-      if (trimmed.contains("{") && !trimmed.contains("}")) "$trimmed }" else trimmed
-    }
-
-    val finalState =
-      content.lines().fold(State()) { state, line ->
-        if (state.lines.size >= maxLines) return@fold state
-        val trimmed = line.trim()
-        val nextInCommentBlock =
-          when {
-            trimmed.startsWith(blockCommentStart) -> true
-            trimmed.endsWith(blockCommentEnd) -> false
-            language.lowercase() == "python" && trimmed == "\"\"\"" -> !state.inCommentBlock
-            else -> state.inCommentBlock
-          }
-
-        val shouldIncludeLine = isDefinition(line) || isCommentLine(line) || state.inCommentBlock
-        val updatedLines =
-          if (shouldIncludeLine)
-            if (isDefinition(line)) state.lines + processDefinitionLine(line) else state.lines + line
-          else state.lines
-        State(updatedLines, nextInCommentBlock)
-      }
-
-    // Ensure we're using the correct file path and language
-    return """|### File: $path
-              |~~~$language
-              |${finalState.lines.joinToString("\n")}
-              |~~~"""
-      .trimMargin()
-  }
-
-  /**
-   * Finds the README file in the repository.
-   *
-   * @param repoDir The root directory of the repository
-   * @return The README file if found, or null if not found
-   */
-  fun findReadmeFile(repoDir: File): String {
-    val readmeFile =
-      listOf("README.md", "Readme.md", "readme.md", "README.txt", "readme.txt")
-        .map { File(repoDir, it) }
-        .firstOrNull { it.exists() }
-
-    return if (readmeFile != null) {
-      val content = readmeFile.readText()
-      logger.info("Readme file found: ${readmeFile.absolutePath}")
-      logger.debug("Readme file content: $content")
-      content
-    } else {
-      logger.warn("No readme file found in ${repoDir.absolutePath}")
-      "No README content available."
-    }
-  }
-
-  private fun findCodeFiles(dir: File): List<File> =
-    when {
-      dir.isHidden || dir.name == ".git" -> emptyList()
-      !dir.isDirectory -> emptyList()
-      else -> {
-        val files = dir.listFiles() ?: return emptyList()
-        files.flatMap { file ->
-          when {
-            file.isDirectory -> findCodeFiles(file)
-            isCodeFile(file) -> listOf(file)
-            else -> emptyList()
-          }
-        }
-      }
-    }
-
-  private fun isCodeFile(file: File): Boolean {
-    val codeExtensions =
+    private val CODE_EXTENSIONS =
       setOf(
-        // JVM languages
         "kt",
         "java",
         "scala",
         "groovy",
         "clj",
-
-        // Script languages
         "py",
         "rb",
         "js",
@@ -258,8 +54,6 @@ data class CodeAnalyzer(
         "sh",
         "bash",
         "ps1",
-
-        // Systems programming
         "c",
         "cpp",
         "cc",
@@ -271,8 +65,6 @@ data class CodeAnalyzer(
         "rs",
         "swift",
         "m",
-
-        // Web
         "html",
         "htm",
         "css",
@@ -281,8 +73,6 @@ data class CodeAnalyzer(
         "less",
         "vue",
         "svelte",
-
-        // Data formats & Config
         "json",
         "xml",
         "yaml",
@@ -292,8 +82,6 @@ data class CodeAnalyzer(
         "ini",
         "conf",
         "md",
-
-        // Build files
         "gradle",
         "gradle.kts",
         "sbt",
@@ -301,8 +89,6 @@ data class CodeAnalyzer(
         "cmake",
         "make",
         "mk",
-
-        // Other languages
         "sql",
         "r",
         "dart",
@@ -316,95 +102,248 @@ data class CodeAnalyzer(
         "fsx",
         "jl",
       )
-    return file.extension.lowercase() in codeExtensions
+
+    private val IGNORED_DIRECTORIES =
+      setOf(
+        ".git",
+        ".svn",
+        ".hg",
+        ".bzr",
+        "node_modules",
+        "target",
+        "build",
+        "dist",
+        "out",
+        ".gradle",
+        ".idea",
+        ".vscode",
+      )
   }
+
+  private val languagePatterns = createLanguagePatterns()
+
+  fun collectSummarizedCodeSnippets(repoDir: File, maxLines: Int = DEFAULT_MAX_LINES): List<String> =
+    findCodeFiles(repoDir)
+      .filter { it.isRelevantCodeFile() && !it.isTestFile() }
+      .mapNotNull { file ->
+        try {
+          val relativePath = file.getRelativePathFrom(repoDir)
+          val language = getLanguageFromExtension(file.extension)
+          val content = file.readText()
+          summarizeCodeContent(relativePath, language, content, maxLines)
+        } catch (e: Exception) {
+          logger.warn("Error processing file ${file.absolutePath}: ${e.message}")
+          null
+        }
+      }
+      .also { logCollectionResults(it, repoDir) }
+
+  fun summarizeCodeContent(path: String, language: String, content: String, maxLines: Int = SUMMARY_MAX_LINES): String {
+    val patterns = languagePatterns[language.lowercase()] ?: languagePatterns["default"]!!
+
+    val processor = CodeContentProcessor(patterns, maxLines)
+    val processedLines = processor.processContent(content.lines())
+
+    return formatCodeSummary(path, language, processedLines)
+  }
+
+  fun findReadmeFile(repoDir: File): String {
+    val readmeFile = findFirstReadmeFile(repoDir)
+
+    return readmeFile?.let { file ->
+      try {
+        val content = file.readText()
+        logger.info("Readme file found: ${file.absolutePath}")
+        logger.debug("Readme file content: $content")
+        content
+      } catch (e: Exception) {
+        logger.info("Error reading readme file ${file.absolutePath}: ${e.message}")
+        "No README content available."
+      }
+    }
+      ?: run {
+        logger.warn("No readme file found in ${repoDir.absolutePath}")
+        "No README content available."
+      }
+  }
+
+  private fun findCodeFiles(dir: File): List<File> =
+    when {
+      shouldIgnoreDirectory(dir) -> emptyList()
+      !dir.isDirectory -> emptyList()
+      else -> {
+        val files = dir.listFiles() ?: return emptyList()
+        files.flatMap { file ->
+          when {
+            file.isDirectory -> findCodeFiles(file)
+            isCodeFile(file) && file.canRead() -> listOf(file)
+            else -> emptyList()
+          }
+        }
+      }
+    }
+
+  private fun shouldIgnoreDirectory(dir: File): Boolean = dir.isHidden || dir.name in IGNORED_DIRECTORIES
+
+  private fun isCodeFile(file: File): Boolean = file.extension.lowercase() in CODE_EXTENSIONS
+
+  private fun File.isRelevantCodeFile(): Boolean = extension.lowercase() in SUPPORTED_EXTENSIONS
+
+  private fun File.isTestFile(): Boolean =
+    absolutePath.contains("test", ignoreCase = true) || absolutePath.contains("spec", ignoreCase = true)
+
+  private fun File.getRelativePathFrom(baseDir: File): String =
+    absolutePath.removePrefix(baseDir.absolutePath).removePrefix(File.separator)
+
+  private fun logCollectionResults(snippets: List<String>, repoDir: File) {
+    logger.info("Collected ${snippets.size} summarized snippets from ${repoDir.absolutePath}")
+    logger.debug("Snippets Found:\n${snippets.joinToString("\n")}")
+  }
+
+  private fun findFirstReadmeFile(repoDir: File): File? =
+    README_FILENAMES.map { File(repoDir, it) }.firstOrNull { it.exists() && it.canRead() }
+
+  private fun formatCodeSummary(path: String, language: String, lines: List<String>): String =
+    """|### File: $path
+       |~~~$language
+       |${lines.joinToString("\n")}
+       |~~~"""
+      .trimMargin()
+
+  private fun createLanguagePatterns(): Map<String, LanguagePatterns> =
+    mapOf(
+      "kotlin" to
+        LanguagePatterns(
+          Regex(
+            "class|interface|object|enum class|data class|sealed class|fun|val|var|const|typealias|annotation class"
+          ),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "scala" to
+        LanguagePatterns(
+          Regex(
+            "class|object|trait|case class|case object|def|val|var|lazy val|type|implicit|sealed|abstract|override|package object"
+          ),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "java" to
+        LanguagePatterns(
+          Regex(
+            "class|interface|enum|@interface|record|public|private|protected|static|abstract|final|synchronized|volatile|native|transient|strictfp|void"
+          ),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "python" to LanguagePatterns(Regex("def|class|async def|@\\w+|import|from"), listOf("#"), "\"\"\"", "\"\"\""),
+      "ruby" to
+        LanguagePatterns(Regex("def|class|module|attr_\\w+|require|include|extend"), listOf("#"), "=begin", "=end"),
+      "javascript" to
+        LanguagePatterns(
+          Regex("function|class|const|let|var|import|export|interface|type|enum|namespace"),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "typescript" to
+        LanguagePatterns(
+          Regex("function|class|const|let|var|import|export|interface|type|enum|namespace"),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "go" to LanguagePatterns(Regex("func|type|struct|interface|package|import|var|const"), listOf("//"), "/*", "*/"),
+      "rust" to
+        LanguagePatterns(
+          Regex("fn|struct|enum|trait|impl|pub|use|mod|const|static|type|async|unsafe"),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "c" to
+        LanguagePatterns(Regex("struct|enum|typedef|void|int|char|bool|extern|static|class"), listOf("//"), "/*", "*/"),
+      "cpp" to
+        LanguagePatterns(
+          Regex("class|struct|enum|typedef|namespace|template|void|int|char|bool|auto|extern|static|virtual"),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
+      "default" to
+        LanguagePatterns(
+          Regex("class|interface|object|enum|fun|def|function|public|private|protected|static"),
+          listOf("//", "#"),
+          "/*",
+          "*/",
+        ),
+    )
 
   private fun getLanguageFromExtension(extension: String): String =
     when (extension.lowercase()) {
-      // JVM languages
       "kt" -> "kotlin"
       "java" -> "java"
       "scala" -> "scala"
       "groovy" -> "groovy"
       "clj" -> "clojure"
-
-      // Script languages
       "py" -> "python"
       "rb" -> "ruby"
-      "js" -> "javascript"
+      "js",
       "jsx" -> "javascript"
-      "ts" -> "typescript"
+      "ts",
       "tsx" -> "typescript"
       "php" -> "php"
       "pl",
       "pm" -> "perl"
-
       "sh",
       "bash" -> "shell"
-
       "ps1" -> "powershell"
-
-      // Systems programming
       "c" -> "c"
       "cpp",
       "cc",
       "cxx" -> "cpp"
-
       "h",
       "hpp" -> "cpp-header"
-
       "cs" -> "csharp"
       "go" -> "go"
       "rs" -> "rust"
       "swift" -> "swift"
       "m" -> "objective-c"
-
-      // Web
       "html",
       "htm" -> "html"
-
       "css" -> "css"
       "scss",
       "sass" -> "sass"
-
       "less" -> "less"
       "vue" -> "vue"
       "svelte" -> "svelte"
-
-      // Data formats
       "json" -> "json"
       "xml" -> "xml"
       "yaml",
       "yml" -> "yaml"
-
       "toml" -> "toml"
       "md" -> "markdown"
       "csv" -> "csv"
-
-      // Configuration
       "gradle" -> "gradle"
       "gradle.kts" -> "gradle-kotlin"
       "properties" -> "properties"
       "ini" -> "ini"
       "conf" -> "conf"
-
-      // Other
       "sql" -> "sql"
       "r" -> "r"
       "dart" -> "dart"
       "lua" -> "lua"
       "ex",
       "exs" -> "elixir"
-
       "erl",
       "hrl" -> "erlang"
-
       "hs" -> "haskell"
       "fs",
       "fsx" -> "fsharp"
-
       "jl" -> "julia"
-
       else -> "text"
     }
 }
