@@ -2,7 +2,7 @@ import java.io.IOException
 import java.nio.file.Path
 import java.nio.file.Paths
 import mcp.code.analysis.config.AppConfig
-import mcp.code.analysis.server.Server
+import mcp.code.analysis.server.Mcp
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -88,7 +88,7 @@ fun runApplication(args: Array<String>): Result<Unit> = runCatching {
     logger.error("Failed to create necessary directories, check previous errors")
     throw IOException("Failed to create one or more required directories")
   }
-  executeCommand(command, Server())
+  executeCommand(command, Mcp())
 }
 
 /**
@@ -160,13 +160,13 @@ fun createDirectoryWithFullPath(path: Path): Result<Pair<Path, Boolean>> = runCa
  * @param server The Server instance to use for execution.
  * @throws IllegalArgumentException If the command type is UNKNOWN.
  */
-fun executeCommand(command: AppCommand, server: Server) {
+fun executeCommand(command: AppCommand, server: Mcp) {
   val logger = LoggerFactory.getLogger("Main")
 
   when (command.type) {
-    CommandType.STDIO -> server.runMcpServerUsingStdio()
-    CommandType.SSE_KTOR -> server.runSseMcpServerUsingKtorPlugin(command.port)
-    CommandType.SSE_PLAIN -> server.runSseMcpServerWithPlainConfiguration(command.port)
+    CommandType.STDIO -> server.runUsingStdio()
+    CommandType.SSE_KTOR -> server.runSseUsingKtorPlugin(command.port)
+    CommandType.SSE_PLAIN -> server.runSseWithPlainConfiguration(command.port)
     CommandType.UNKNOWN -> throw IllegalArgumentException("Unknown command: ${command.type}")
   }.also { logger.info("Executed command: ${command.type}") }
 }
