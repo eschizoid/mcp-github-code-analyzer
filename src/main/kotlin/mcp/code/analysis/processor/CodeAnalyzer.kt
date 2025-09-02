@@ -26,7 +26,7 @@ data class CodeAnalyzer(
 ) {
   companion object {
     private const val DEFAULT_MAX_LINES = 100
-    private const val SUMMARY_MAX_LINES = 500
+    private const val SUMMARY_MAX_LINES = 250
     private const val DEFAULT_BINARY_SIZE_THRESHOLD = 1024 * 1024L // 1MB
     private const val DEFAULT_BINARY_DETECTION_THRESHOLD = 0.05
 
@@ -215,7 +215,7 @@ data class CodeAnalyzer(
       "kotlin" to
         LanguagePatterns(
           Regex(
-            "class|interface|object|enum class|data class|sealed class|fun|val|var|const|typealias|annotation class"
+            "\\b(class|interface|object|enum\\s+class|data\\s+class|sealed\\s+class|fun|val|var|const|typealias|annotation\\s+class|import|package)\\b"
           ),
           listOf("//"),
           "/*",
@@ -224,7 +224,7 @@ data class CodeAnalyzer(
       "scala" to
         LanguagePatterns(
           Regex(
-            "class|object|trait|case class|case object|def|val|var|lazy val|type|implicit|sealed|abstract|override|package object"
+            "\\b(class|object|trait|case\\s+class|case\\s+object|def|val|var|lazy\\s+val|type|implicit|sealed|abstract|override|package\\s+object|import|package)\\b"
           ),
           listOf("//"),
           "/*",
@@ -233,49 +233,71 @@ data class CodeAnalyzer(
       "java" to
         LanguagePatterns(
           Regex(
-            "class|interface|enum|@interface|record|public|private|protected|static|abstract|final|synchronized|volatile|native|transient|strictfp|void"
+            "\\b(class|interface|enum|@interface|record|public|private|protected|static|abstract|final|synchronized|volatile|native|transient|strictfp|void|import|package)\\b"
           ),
           listOf("//"),
           "/*",
           "*/",
         ),
-      "python" to LanguagePatterns(Regex("def|class|async def|@\\w+|import|from"), listOf("#"), "\"\"\"", "\"\"\""),
+      "python" to
+        LanguagePatterns(
+          Regex("\\b(def|class|async\\s+def)\\b|@\\w+|\\b(import|from)\\b"),
+          listOf("#"),
+          "\"\"\"",
+          "\"\"\"",
+        ),
       "ruby" to
-        LanguagePatterns(Regex("def|class|module|attr_\\w+|require|include|extend"), listOf("#"), "=begin", "=end"),
+        LanguagePatterns(
+          Regex("\\b(def|class|module|attr_\\w+|require|include|extend)\\b"),
+          listOf("#"),
+          "=begin",
+          "=end",
+        ),
       "javascript" to
         LanguagePatterns(
-          Regex("function|class|const|let|var|import|export|interface|type|enum|namespace"),
+          Regex("\\b(function|class|const|let|var|import|export|interface|type|enum|namespace)\\b"),
           listOf("//"),
           "/*",
           "*/",
         ),
       "typescript" to
         LanguagePatterns(
-          Regex("function|class|const|let|var|import|export|interface|type|enum|namespace"),
+          Regex("\\b(function|class|const|let|var|import|export|interface|type|enum|namespace)\\b"),
           listOf("//"),
           "/*",
           "*/",
         ),
-      "go" to LanguagePatterns(Regex("func|type|struct|interface|package|import|var|const"), listOf("//"), "/*", "*/"),
+      "go" to
+        LanguagePatterns(
+          Regex("\\b(func|type|struct|interface|package|import|var|const)\\b"),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
       "rust" to
         LanguagePatterns(
-          Regex("fn|struct|enum|trait|impl|pub|use|mod|const|static|type|async|unsafe"),
+          Regex("\\b(fn|struct|enum|trait|impl|pub|use|mod|const|static|type|async|unsafe)\\b"),
           listOf("//"),
           "/*",
           "*/",
         ),
       "c" to
-        LanguagePatterns(Regex("struct|enum|typedef|void|int|char|bool|extern|static|class"), listOf("//"), "/*", "*/"),
+        LanguagePatterns(
+          Regex("\\b(struct|enum|typedef|void|int|char|bool|extern|static|class)\\b"),
+          listOf("//"),
+          "/*",
+          "*/",
+        ),
       "cpp" to
         LanguagePatterns(
-          Regex("class|struct|enum|typedef|namespace|template|void|int|char|bool|auto|extern|static|virtual"),
+          Regex("\\b(class|struct|enum|typedef|namespace|template|void|int|char|bool|auto|extern|static|virtual)\\b"),
           listOf("//"),
           "/*",
           "*/",
         ),
       "default" to
         LanguagePatterns(
-          Regex("class|interface|object|enum|fun|def|function|public|private|protected|static"),
+          Regex("\\b(class|interface|object|enum|fun|def|function|public|private|protected|static)\\b"),
           listOf("//", "#"),
           "/*",
           "*/",

@@ -50,7 +50,6 @@ dependencies {
 
   // Logging
   implementation("ch.qos.logback:logback-classic:1.5.18")
-  implementation("org.slf4j:slf4j-jdk-platform-logging:2.0.17")
 
   // Coroutines
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
