@@ -13,13 +13,22 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
    * Processes a list of code lines and returns those that should be included in the summary. Lines are included if they
    * are definitions, comments, or part of a block comment.
    *
+   * The processing follows a two-pass approach:
+   * 1. First pass: Decides which original lines should be included, tracking comment block state
+   * 2. Second pass: Builds output with explicit separators between non-contiguous regions
+   *
+   * During the first pass, lines are included if they are definitions, comments, or part of a block comment. The
+   * comment block state is tracked to ensure multi-line comments are properly captured.
+   *
+   * During the second pass, separators ("...") are added between non-contiguous regions to indicate omitted code
+   * sections. The maxLines limit is strictly respected, prioritizing code lines over separators.
+   *
    * @param lines The lines of code to process.
-   * @return A list of lines selected for summarization.
+   * @return A list of lines selected for summarization, with separators indicating omitted sections.
    */
   fun processContent(lines: List<String>): List<String> {
     if (lines.isEmpty()) return emptyList()
 
-    // First pass: decide which original lines should be included, tracking comment block state
     val includeFlags = BooleanArray(lines.size)
     var inCommentBlock = false
     lines.forEachIndexed { idx, line ->
@@ -30,16 +39,13 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
       inCommentBlock = nextInCommentBlock
     }
 
-    // Second pass: build output with explicit separators between non-contiguous regions
     val result = mutableListOf<String>()
-    var lastIncludedIndex = -2 // ensure the first included line does not trigger separator logic
+    var lastIncludedIndex = -2
 
     fun maybeAddSeparator(nextIndex: Int): Boolean {
-      // Return true if a separator was added
       if (result.isEmpty()) return false
       val isGap = nextIndex != lastIncludedIndex + 1
       if (!isGap) return false
-      // Ensure there is room for the separator and at least one code line
       if (result.size + 2 > maxLines) return false
       result.add("...")
       return true
@@ -48,14 +54,11 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
     for (i in lines.indices) {
       if (!includeFlags[i]) continue
 
-      // If there is a gap from the last included line, insert a separator if we have room
       maybeAddSeparator(i)
 
-      // Prepare the line to add, possibly normalizing definitions
       val line = lines[i]
       val toAdd = if (isDefinition(line)) processDefinitionLine(line) else line
 
-      // Respect maxLines strictly, prioritizing code lines over separators
       if (result.size >= maxLines) break
 
       result.add(toAdd)
