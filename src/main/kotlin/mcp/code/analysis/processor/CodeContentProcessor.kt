@@ -17,28 +17,54 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
    * @return A list of lines selected for summarization.
    */
   fun processContent(lines: List<String>): List<String> {
-    val finalState =
-      lines.fold(ProcessingState()) { state, line ->
-        if (state.lines.size >= maxLines) return@fold state
+    if (lines.isEmpty()) return emptyList()
 
-        val trimmed = line.trim()
-        val nextInCommentBlock = determineCommentBlockState(trimmed, state.inCommentBlock)
-        val shouldIncludeLine = isDefinition(line) || isCommentLine(line) || state.inCommentBlock
+    // First pass: decide which original lines should be included, tracking comment block state
+    val includeFlags = BooleanArray(lines.size)
+    var inCommentBlock = false
+    lines.forEachIndexed { idx, line ->
+      val trimmed = line.trim()
+      val shouldInclude = isDefinition(line) || isCommentLine(line) || inCommentBlock
+      includeFlags[idx] = shouldInclude
+      val nextInCommentBlock = determineCommentBlockState(trimmed, inCommentBlock)
+      inCommentBlock = nextInCommentBlock
+    }
 
-        val updatedLines =
-          if (shouldIncludeLine) {
-            when {
-              isDefinition(line) -> state.lines + processDefinitionLine(line)
-              else -> state.lines + line
-            }
-          } else {
-            state.lines
-          }
+    // Second pass: build output with explicit separators between non-contiguous regions
+    val result = mutableListOf<String>()
+    var lastIncludedIndex = -2 // ensure the first included line does not trigger separator logic
 
-        ProcessingState(updatedLines, nextInCommentBlock)
-      }
+    fun maybeAddSeparator(nextIndex: Int): Boolean {
+      // Return true if a separator was added
+      if (result.isEmpty()) return false
+      val isGap = nextIndex != lastIncludedIndex + 1
+      if (!isGap) return false
+      // Ensure there is room for the separator and at least one code line
+      if (result.size + 2 > maxLines) return false
+      result.add("...")
+      return true
+    }
 
-    return finalState.lines
+    for (i in lines.indices) {
+      if (!includeFlags[i]) continue
+
+      // If there is a gap from the last included line, insert a separator if we have room
+      maybeAddSeparator(i)
+
+      // Prepare the line to add, possibly normalizing definitions
+      val line = lines[i]
+      val toAdd = if (isDefinition(line)) processDefinitionLine(line) else line
+
+      // Respect maxLines strictly, prioritizing code lines over separators
+      if (result.size >= maxLines) break
+
+      result.add(toAdd)
+      lastIncludedIndex = i
+
+      if (result.size >= maxLines) break
+    }
+
+    return result
   }
 
   private fun isDefinition(line: String): Boolean = patterns.definitionPattern.containsMatchIn(line.trim())
