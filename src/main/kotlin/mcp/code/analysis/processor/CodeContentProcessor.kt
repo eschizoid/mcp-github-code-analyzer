@@ -29,45 +29,51 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
   fun processContent(lines: List<String>): List<String> {
     if (lines.isEmpty()) return emptyList()
 
-    val includeFlags = BooleanArray(lines.size)
-    var inCommentBlock = false
-    lines.forEachIndexed { idx, line ->
-      val trimmed = line.trim()
-      val shouldInclude = isDefinition(line) || isCommentLine(line) || inCommentBlock
-      includeFlags[idx] = shouldInclude
-      val nextInCommentBlock = determineCommentBlockState(trimmed, inCommentBlock)
-      inCommentBlock = nextInCommentBlock
+    // First pass: compute inclusion flags functionally while tracking the comment block state
+    data class Pass1(val flags: MutableList<Boolean>, val inBlock: Boolean)
+
+    val pass1 =
+      lines.foldIndexed(Pass1(mutableListOf<Boolean>(), false)) { idx, acc, line ->
+        val trimmed = line.trim()
+        val shouldInclude = isDefinition(line) || isCommentLine(line) || acc.inBlock
+        acc.flags.add(shouldInclude)
+        val nextInCommentBlock = determineCommentBlockState(trimmed, acc.inBlock)
+        acc.copy(flags = acc.flags, inBlock = nextInCommentBlock)
+      }
+
+    val includeFlags: List<Boolean> = pass1.flags
+
+    // Second pass: build output with separators between non-contiguous regions
+    // Accumulates second-pass output and the index of the last included source line
+    data class OutputAcc(val result: MutableList<String>, val lastIdx: Int)
+
+    fun maybeAddSeparatorFn(state: OutputAcc, nextIndex: Int): OutputAcc {
+      if (state.result.isEmpty()) return state
+      val isGap = nextIndex != state.lastIdx + 1
+      if (!isGap) return state
+      if (state.result.size + 2 > maxLines) return state
+      state.result.add("...")
+      return state
     }
 
-    val result = mutableListOf<String>()
-    var lastIncludedIndex = -2
+    val finalAcc: OutputAcc =
+      lines.indices.fold(OutputAcc(mutableListOf(), -2)) { acc, i ->
+        if (!includeFlags[i]) return@fold acc
 
-    fun maybeAddSeparator(nextIndex: Int): Boolean {
-      if (result.isEmpty()) return false
-      val isGap = nextIndex != lastIncludedIndex + 1
-      if (!isGap) return false
-      if (result.size + 2 > maxLines) return false
-      result.add("...")
-      return true
-    }
+        val afterSep = maybeAddSeparatorFn(acc, i)
 
-    for (i in lines.indices) {
-      if (!includeFlags[i]) continue
+        val line = lines[i]
+        val toAdd = if (isDefinition(line)) processDefinitionLine(line) else line
 
-      maybeAddSeparator(i)
+        if (afterSep.result.size >= maxLines) return@fold afterSep
 
-      val line = lines[i]
-      val toAdd = if (isDefinition(line)) processDefinitionLine(line) else line
+        afterSep.result.add(toAdd)
+        val updated = afterSep.copy(result = afterSep.result, lastIdx = i)
 
-      if (result.size >= maxLines) break
+        if (updated.result.size >= maxLines) updated else updated
+      }
 
-      result.add(toAdd)
-      lastIncludedIndex = i
-
-      if (result.size >= maxLines) break
-    }
-
-    return result
+    return finalAcc.result
   }
 
   private fun isDefinition(line: String): Boolean = patterns.definitionPattern.containsMatchIn(line.trim())
