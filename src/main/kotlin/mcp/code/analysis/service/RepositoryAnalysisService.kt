@@ -16,22 +16,16 @@ data class RepositoryAnalysisService(
    * @param branch The branch of the repository to analyze.
    * @return A summary of the analysis results.
    */
-  suspend fun analyzeRepository(repoUrl: String, branch: String): String {
-    return try {
-      val repoDir = gitService.cloneRepository(repoUrl, branch)
-
-      val readme = codeAnalyzer.findReadmeFile(repoDir)
-      val codeSnippets = codeAnalyzer.collectSummarizedCodeSnippets(repoDir)
-
-      val insightsPrompt = modelContextService.buildInsightsPrompt(codeSnippets, readme)
-      val insightsResponse = modelContextService.generateResponse(insightsPrompt)
-
-      val summaryPrompt = modelContextService.buildSummaryPrompt(insightsResponse)
-      val summaryResponse = modelContextService.generateResponse(summaryPrompt)
-
-      summaryResponse
-    } catch (e: Exception) {
-      throw Exception("Error analyzing repository: ${e.message}", e)
-    }
-  }
+  suspend fun analyzeRepository(repoUrl: String, branch: String): String =
+    runCatching { gitService.cloneRepository(repoUrl, branch) }
+      .mapCatching { repoDir ->
+        val readme = codeAnalyzer.findReadmeFile(repoDir)
+        val codeSnippets = codeAnalyzer.collectSummarizedCodeSnippets(repoDir)
+        val insightsPrompt = modelContextService.buildInsightsPrompt(codeSnippets, readme)
+        insightsPrompt
+      }
+      .mapCatching { insightsPrompt -> modelContextService.generateResponse(insightsPrompt) }
+      .mapCatching { insightsResponse -> modelContextService.buildSummaryPrompt(insightsResponse) }
+      .mapCatching { summaryPrompt -> modelContextService.generateResponse(summaryPrompt) }
+      .getOrElse { e -> throw Exception("Error analyzing repository: ${e.message}", e) }
 }

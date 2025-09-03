@@ -1,7 +1,6 @@
 package mcp.code.analysis.processor
 
 import java.io.File
-import kotlin.text.lines
 import mcp.code.analysis.service.ModelContextService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -12,8 +11,6 @@ data class LanguagePatterns(
   val blockCommentStart: String,
   val blockCommentEnd: String,
 )
-
-data class ProcessingState(val lines: List<String> = emptyList(), val inCommentBlock: Boolean = false)
 
 /**
  * Responsible for analyzing the structure of a codebase. Identifies files, directories, and their respective metadata
@@ -126,15 +123,14 @@ data class CodeAnalyzer(
     findCodeFiles(repoDir)
       .filter { it.isRelevantCodeFile() && !it.isTestFile() }
       .mapNotNull { file ->
-        try {
-          val relativePath = file.getRelativePathFrom(repoDir)
-          val language = getLanguageFromExtension(file.extension)
-          val content = file.readText()
-          summarizeCodeContent(relativePath, language, content, maxLines)
-        } catch (e: Exception) {
-          logger.warn("Error processing file ${file.absolutePath}: ${e.message}")
-          null
-        }
+        runCatching {
+            val relativePath = file.getRelativePathFrom(repoDir)
+            val language = getLanguageFromExtension(file.extension)
+            val content = file.readText()
+            summarizeCodeContent(relativePath, language, content, maxLines)
+          }
+          .onFailure { e -> logger.warn("Error processing file ${file.absolutePath}: ${e.message}") }
+          .getOrNull()
       }
       .also { logCollectionResults(it, repoDir) }
 

@@ -5,7 +5,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import java.io.File
-import java.lang.Exception
 import kotlin.test.assertEquals
 import kotlinx.coroutines.test.runTest
 import mcp.code.analysis.processor.CodeAnalyzer

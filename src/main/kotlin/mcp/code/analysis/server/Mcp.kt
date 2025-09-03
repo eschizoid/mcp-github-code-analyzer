@@ -7,7 +7,6 @@ import io.ktor.server.engine.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
-import io.ktor.sse.*
 import io.ktor.util.collections.*
 import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
@@ -15,9 +14,10 @@ import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.SseServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.mcp
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlinx.io.IOException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
@@ -85,59 +85,50 @@ class Mcp(
             val server = configureServer()
             servers[transport.sessionId] = server
 
-            val heartbeatJob = launch {
-              flow {
-                  while (true) {
-                    emit(Unit)
-                    delay(15_000)
-                  }
-                }
-                .onEach { send(ServerSentEvent(event = "heartbeat")) }
-                .catch { e ->
-                  when (e) {
-                    is IOException -> logger.debug("Client disconnected during heartbeat: ${e.message}")
-                    else -> logger.error("Heartbeat error: ${e.message}", e)
-                  }
-                }
-                .onCompletion { logger.debug("Heartbeat job terminated for session: ${transport.sessionId}") }
-                .collect()
-            }
-
             server.onClose {
-              logger.info("Server closed")
+              logger.info("Server closed for session: ${transport.sessionId}")
               servers.remove(transport.sessionId)
             }
 
-            server.connect(transport)
-
             try {
+              server.connect(transport)
+              logger.info("Server connected for session: ${transport.sessionId}")
               awaitCancellation()
+            } catch (e: Exception) {
+              logger.error("Connection error: ${e.message}", e)
             } finally {
-              heartbeatJob.cancel()
+              servers.remove(transport.sessionId)
               logger.info("SSE connection closed for session: ${transport.sessionId}")
             }
           }
 
           post("/message") {
             try {
-
               val sessionId =
                 call.request.queryParameters["sessionId"]
                   ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing sessionId parameter")
 
-              val transport = servers[sessionId]?.transport as? SseServerTransport
-              if (transport == null) {
+              val server = servers[sessionId]
+              if (server == null) {
+                logger.warn("Session not found: $sessionId")
                 call.respond(HttpStatusCode.NotFound, "Session not found")
                 return@post
               }
 
+              val transport = server.transport as? SseServerTransport
+              if (transport == null) {
+                logger.warn("Invalid transport for session: $sessionId")
+                call.respond(HttpStatusCode.InternalServerError, "Invalid transport")
+                return@post
+              }
+
               logger.debug("Handling message for session: $sessionId")
-              transport.handlePostMessage(call)
+              withTimeout(3_600_000) { transport.handlePostMessage(call) }
 
               call.respond(HttpStatusCode.OK)
             } catch (e: Exception) {
               logger.error("Error handling message: ${e.message}", e)
-              call.respond(HttpStatusCode.InternalServerError, "Error handling message: ${e.message}")
+              call.respond(HttpStatusCode.InternalServerError, "Error: ${e.message}")
             }
           }
         }
