@@ -4,6 +4,8 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.cio.*
 import io.ktor.server.engine.*
+import io.ktor.server.plugins.*
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
@@ -14,10 +16,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.SseServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.mcp
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.*
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
@@ -38,14 +37,7 @@ class Mcp(
   private val implementation: Implementation =
     Implementation(name = "MCP GitHub Code Analysis Server", version = "0.1.0"),
   private val serverOptions: ServerOptions =
-    ServerOptions(
-      capabilities =
-        ServerCapabilities(
-          prompts = ServerCapabilities.Prompts(listChanged = true),
-          resources = ServerCapabilities.Resources(subscribe = true, listChanged = true),
-          tools = ServerCapabilities.Tools(listChanged = true),
-        )
-    ),
+    ServerOptions(capabilities = ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = true))),
 ) {
 
   /** Starts an MCP server using standard input/output (stdio) for communication. */
@@ -78,12 +70,28 @@ class Mcp(
 
     embeddedServer(CIO, host = "0.0.0.0", port = port) {
         install(SSE)
+        install(CORS) {
+          anyHost()
+          allowCredentials = true
+          allowNonSimpleContentTypes = true
+          allowMethod(HttpMethod.Options)
+          allowMethod(HttpMethod.Post)
+          allowMethod(HttpMethod.Get)
+          allowHeader(HttpHeaders.ContentType)
+          allowHeader("Cache-Control")
+        }
 
         routing {
+          get("/") { call.respondText("MCP GitHub Code Analysis Server v0.1.0", ContentType.Text.Plain) }
+
+          get("/health") { call.respondText("MCP Server is running", ContentType.Text.Plain) }
+
           sse("/sse") {
+            logger.info("New SSE connection established from ${call.request.origin.remoteHost}")
             val transport = SseServerTransport("/message", this)
             val server = configureServer()
             servers[transport.sessionId] = server
+            logger.info("Created server for session: ${transport.sessionId}")
 
             server.onClose {
               logger.info("Server closed for session: ${transport.sessionId}")
@@ -91,11 +99,13 @@ class Mcp(
             }
 
             try {
+              logger.info("Attempting to connect server for session: ${transport.sessionId}")
               server.connect(transport)
-              logger.info("Server connected for session: ${transport.sessionId}")
+              logger.info("Server successfully connected for session: ${transport.sessionId}")
               awaitCancellation()
             } catch (e: Exception) {
-              logger.error("Connection error: ${e.message}", e)
+              logger.error("Connection error for session ${transport.sessionId}: ${e.message}", e)
+              throw e
             } finally {
               servers.remove(transport.sessionId)
               logger.info("SSE connection closed for session: ${transport.sessionId}")
@@ -107,6 +117,8 @@ class Mcp(
               val sessionId =
                 call.request.queryParameters["sessionId"]
                   ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing sessionId parameter")
+
+              logger.debug("Handling message for session: $sessionId")
 
               val server = servers[sessionId]
               if (server == null) {
@@ -142,10 +154,16 @@ class Mcp(
    * @param port The port number on which the SSE MCP server will listen for client connections.
    */
   fun runSseUsingKtorPlugin(port: Int): Unit = runBlocking {
-    logger.debug("Starting SSE server on port $port")
-    logger.debug("Use inspector to connect to http://localhost:$port/sse")
+    logger.info("Starting SSE server using Ktor plugin on port $port")
+    logger.info("Use inspector to connect to http://localhost:$port/sse")
 
     embeddedServer(CIO, host = "0.0.0.0", port = port) {
+        install(CORS) {
+          anyHost()
+          allowCredentials = true
+          allowNonSimpleContentTypes = true
+        }
+
         mcp {
           return@mcp configureServer()
         }
@@ -159,6 +177,7 @@ class Mcp(
    * @return The configured MCP server instance.
    */
   fun configureServer(): SdkServer {
+    logger.info("Configuring MCP server with implementation: ${implementation.name} v${implementation.version}")
     val server = SdkServer(implementation, serverOptions)
 
     server.addTool(
@@ -193,12 +212,35 @@ class Mcp(
         val repoUrl =
           arguments["repoUrl"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Missing repoUrl parameter")
         val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
-        val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
+
+        val startTime = System.currentTimeMillis()
+        logger.info("Starting repository analysis for: $repoUrl")
+        val result = withTimeout(3_600_000) { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
+        val duration = System.currentTimeMillis() - startTime
+        logger.info("Analysis completed in ${duration}ms")
+
         CallToolResult(content = listOf(TextContent(result)))
+      } catch (e: TimeoutCancellationException) {
+        CallToolResult(
+          content =
+            listOf(
+              TextContent(
+                buildString {
+                  append("Repository analysis timed out after 2 minutes. ")
+                  append("Large repositories may take longer to analyze. ")
+                  append("Try with a smaller repository or specific branch.")
+                }
+              )
+            ),
+          isError = true,
+        )
       } catch (e: Exception) {
+        logger.error("Analysis failed: ${e.message}", e)
         CallToolResult(content = listOf(TextContent("Error analyzing repository: ${e.message}")), isError = true)
       }
     }
+
+    logger.info("MCP server configured successfully with 1 tool")
     return server
   }
 }
