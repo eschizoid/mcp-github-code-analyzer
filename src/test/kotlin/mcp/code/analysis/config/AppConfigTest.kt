@@ -1,6 +1,6 @@
 package mcp.code.analysis.config
 
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 class AppConfigTest {

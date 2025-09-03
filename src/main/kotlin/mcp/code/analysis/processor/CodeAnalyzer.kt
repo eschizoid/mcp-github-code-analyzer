@@ -1,7 +1,6 @@
 package mcp.code.analysis.processor
 
 import java.io.File
-import kotlin.text.lines
 import mcp.code.analysis.service.ModelContextService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
