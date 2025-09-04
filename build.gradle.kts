@@ -18,12 +18,14 @@ plugins {
 scmVersion {
   unshallowRepoOnCI.set(true)
   tag { prefix.set("v") }
+  versionCreator("versionWithBranch")
+  branchVersionCreator.set(mapOf("main" to "simple"))
+  versionIncrementer("incrementMinor")
+  branchVersionIncrementer.set(mapOf("feature/.*" to "incrementMinor", "bugfix/.*" to "incrementPatch"))
 }
 
 group = "io.github.eschizoid"
-
 version = rootProject.scmVersion.version
-
 description = "MCP Server for GitHub Code Repositories Analysis"
 
 dependencies {
@@ -78,15 +80,15 @@ application { mainClass.set("MainKt") }
 
 tasks.jar {
   manifest { attributes["Main-Class"] = "MainKt" }
-
   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
   exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
-
   from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+  useJUnitPlatform()
+  jvmArgs("-Dnet.bytebuddy.experimental=true")
+}
 
 tasks.jacocoTestReport {
   reports {
@@ -99,7 +101,23 @@ tasks.jacocoTestReport {
 java {
   withSourcesJar()
   withJavadocJar()
-  toolchain { languageVersion = JavaLanguageVersion.of(23) }
+  toolchain { languageVersion = JavaLanguageVersion.of(24) }
+}
+
+repositories {
+  mavenCentral()
+  maven("https://maven.pkg.jetbrains.space/public/p/kotlin-mcp-sdk/sdk")
+  maven {
+    credentials {
+      username =
+        System.getenv("JRELEASER_MAVENCENTRAL_SONATYPE_USERNAME")
+          ?: project.properties["mavencentralSonatypeUsername"]?.toString()
+      password =
+        System.getenv("JRELEASER_MAVENCENTRAL_SONATYPE_PASSWORD")
+          ?: project.properties["mavencentralSonatypePassword"]?.toString()
+    }
+    url = uri("https://central.sonatype.com/")
+  }
 }
 
 spotless {
@@ -196,6 +214,7 @@ jreleaser {
           stagingRepository("build/staging-deploy")
           enabled.set(true)
           sign.set(false)
+          maxRetries.set(180)
         }
       }
     }
