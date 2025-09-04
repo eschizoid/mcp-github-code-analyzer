@@ -38,7 +38,14 @@ class Mcp(
   private val implementation: Implementation =
     Implementation(name = "MCP GitHub Code Analysis Server", version = "0.1.0"),
   private val serverOptions: ServerOptions =
-    ServerOptions(capabilities = ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = true))),
+    ServerOptions(
+      capabilities =
+        ServerCapabilities(
+          tools = ServerCapabilities.Tools(listChanged = true),
+          prompts = ServerCapabilities.Prompts(listChanged = true),
+          resources = ServerCapabilities.Resources(subscribe = true, listChanged = true),
+        )
+    ),
 ) {
 
   /** Starts an MCP server using standard input/output (stdio) for communication. */

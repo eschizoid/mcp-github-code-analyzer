@@ -25,7 +25,9 @@ scmVersion {
 }
 
 group = "io.github.eschizoid"
+
 version = rootProject.scmVersion.version
+
 description = "MCP Server for GitHub Code Repositories Analysis"
 
 dependencies {

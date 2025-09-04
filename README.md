@@ -117,6 +117,7 @@ Optional parameters:
     - `Mcp.kt`: Functional MCP server with multiple run modes
 - `processor/`: MCP server implementation
     - `CodeAnalyzer.kt`: Analyzes code structure
+    - `CodeContentProcessor.kt`: Processes code files
 - `service/`: Core services for repository analysis
     - `GitService.kt`: Handles repository cloning
     - `ModelContextService.kt`: Generates insights using AI models
