@@ -87,7 +87,6 @@ tasks.jar {
 
 tasks.test {
   useJUnitPlatform()
-  // Enable Byte Buddy experimental support for Java 24 to allow MockK class transformation
   jvmArgs("-Dnet.bytebuddy.experimental=true")
 }
 

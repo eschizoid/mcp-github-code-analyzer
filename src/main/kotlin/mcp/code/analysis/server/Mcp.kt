@@ -16,6 +16,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.SseServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.mcp
+import java.util.Locale.getDefault
 import kotlinx.coroutines.*
 import kotlinx.io.asSink
 import kotlinx.io.asSource
@@ -240,7 +241,134 @@ class Mcp(
       }
     }
 
-    logger.info("MCP server configured successfully with 1 tool")
+    server.addPrompt(
+      name = "analyze-codebase",
+      description = "Generate a comprehensive analysis prompt for a codebase",
+      arguments =
+        listOf(
+          PromptArgument(
+            name = "focus",
+            description = "What aspect to focus on (architecture, security, performance, etc.)",
+            required = false,
+          ),
+          PromptArgument(
+            name = "language",
+            description = "Primary programming language of the codebase",
+            required = false,
+          ),
+        ),
+    ) { request ->
+      val focus = request.arguments?.get("focus") ?: "general architecture"
+      val language = request.arguments?.get("language") ?: "any language"
+
+      val promptText =
+        """
+        Please analyze this codebase with a focus on ${focus}.
+
+        Primary language: $language
+
+        Please provide:
+        1. Overall architecture and design patterns
+        2. Code quality and maintainability assessment
+        3. Potential security concerns
+        4. Performance considerations
+        5. Recommendations for improvements
+
+        Focus particularly on $focus aspects of the code.
+      """
+          .trimIndent()
+
+      GetPromptResult(
+        description = "Codebase analysis prompt focusing on $focus",
+        messages = listOf(PromptMessage(role = Role.user, content = TextContent(promptText))),
+      )
+    }
+
+    server.addPrompt(
+      name = "code-review",
+      description = "Generate a code review prompt template",
+      arguments =
+        listOf(
+          PromptArgument(
+            name = "type",
+            description = "Type of review (security, performance, style, etc.)",
+            required = false,
+          )
+        ),
+    ) { request ->
+      val reviewType = request.arguments?.get("type") ?: "comprehensive"
+
+      val promptText =
+        """
+        Please perform a $reviewType code review of the following code.
+
+        Review criteria:
+        - Code clarity and readability
+        - Best practices adherence
+        - Potential bugs or issues
+        - Performance implications
+        - Security considerations
+        - Maintainability
+
+        Please provide specific feedback with examples and suggestions for improvement.
+      """
+          .trimIndent()
+
+      GetPromptResult(
+        description =
+          "${reviewType.replaceFirstChar { if (it.isLowerCase()) it.titlecase(getDefault()) else it.toString() }} code review template",
+        messages = listOf(PromptMessage(role = Role.user, content = TextContent(promptText))),
+      )
+    }
+
+    server.addResource(
+      uri = "repo://analysis-results",
+      name = "Repository Analysis Results",
+      description = "Latest repository analysis results",
+      mimeType = "application/json",
+    ) {
+      // Return cached analysis results or a placeholder
+      ReadResourceResult(
+        contents =
+          listOf(
+            TextResourceContents(
+              uri = "repo://analysis-results",
+              mimeType = "application/json",
+              text = """{"message": "No analysis results available yet. Run analyze-repository tool first."}""",
+            )
+          )
+      )
+    }
+
+    server.addResource(
+      uri = "repo://metrics",
+      name = "Repository Metrics",
+      description = "Code metrics and statistics",
+      mimeType = "application/json",
+    ) {
+      ReadResourceResult(
+        contents =
+          listOf(
+            TextResourceContents(
+              uri = "repo://metrics",
+              mimeType = "application/json",
+              text =
+                """
+            {
+              "totalFiles": 0,
+              "linesOfCode": 0,
+              "languages": [],
+              "lastAnalyzed": null,
+              "complexity": "unknown"
+            }
+            """
+                  .trimIndent(),
+            )
+          )
+      )
+    }
+
+    logger.info("MCP server configured successfully with 1 tool, 2 prompts, and 2 resources")
     return server
   }
 }

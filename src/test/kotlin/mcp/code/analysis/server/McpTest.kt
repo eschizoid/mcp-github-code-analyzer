@@ -19,6 +19,7 @@ class McpTest {
   private lateinit var serverUnderTest: Mcp
 
   private val toolHandlerSlot = slot<suspend (CallToolRequest) -> CallToolResult>()
+  private val resourceHandlerSlot = slot<suspend (String) -> String>()
 
   @BeforeEach
   fun setUp() {
@@ -30,6 +31,16 @@ class McpTest {
     every {
       anyConstructed<SdkServer>()
         .addTool(name = any(), description = any(), inputSchema = any(), handler = capture(toolHandlerSlot))
+    } returns Unit
+
+    every {
+      anyConstructed<SdkServer>()
+        .addPrompt(name = any<String>(), description = any(), arguments = any(), promptProvider = any())
+    } returns Unit
+
+    every {
+      anyConstructed<SdkServer>()
+        .addResource(name = any<String>(), description = any(), uri = any(), mimeType = any(), readHandler = any())
     } returns Unit
   }
 
