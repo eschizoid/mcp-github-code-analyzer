@@ -9,6 +9,7 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sse.*
+import io.ktor.sse.*
 import io.ktor.util.collections.*
 import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
@@ -41,12 +42,14 @@ class Mcp(
     ServerOptions(
       capabilities =
         ServerCapabilities(
-          tools = ServerCapabilities.Tools(listChanged = true),
-          prompts = ServerCapabilities.Prompts(listChanged = true),
-          resources = ServerCapabilities.Resources(subscribe = true, listChanged = true),
+          tools = ServerCapabilities.Tools(listChanged = false),
+          prompts = ServerCapabilities.Prompts(listChanged = false),
+          resources = ServerCapabilities.Resources(subscribe = false, listChanged = false),
         )
     ),
 ) {
+  private val analysisTimeoutMs: Long = 3_600_000L // 60 minutes
+  private val analysisTimeoutMinutes: Long = analysisTimeoutMs / 60_000L
 
   /** Starts an MCP server using standard input/output (stdio) for communication. */
   fun runUsingStdio() {
@@ -86,12 +89,12 @@ class Mcp(
           allowMethod(HttpMethod.Post)
           allowMethod(HttpMethod.Get)
           allowHeader(HttpHeaders.ContentType)
+          allowHeader(HttpHeaders.Accept)
           allowHeader("Cache-Control")
         }
 
         routing {
           get("/") { call.respondText("MCP GitHub Code Analysis Server v0.1.0", ContentType.Text.Plain) }
-
           get("/health") { call.respondText("MCP Server is running", ContentType.Text.Plain) }
 
           sse("/sse") {
@@ -101,9 +104,22 @@ class Mcp(
             servers[transport.sessionId] = server
             logger.info("Created server for session: ${transport.sessionId}")
 
+            val heartbeatJob = launch {
+              while (isActive) {
+                try {
+                  send(ServerSentEvent("heartbeat", event = "ping"))
+                  delay(25_000)
+                } catch (e: Exception) {
+                  logger.debug("Heartbeat failed: ${e.message}")
+                  break
+                }
+              }
+            }
+
             server.onClose {
               logger.info("Server closed for session: ${transport.sessionId}")
               servers.remove(transport.sessionId)
+              heartbeatJob.cancel()
             }
 
             try {
@@ -115,6 +131,7 @@ class Mcp(
               logger.error("Connection error for session ${transport.sessionId}: ${e.message}", e)
               throw e
             } finally {
+              heartbeatJob.cancel()
               servers.remove(transport.sessionId)
               logger.info("SSE connection closed for session: ${transport.sessionId}")
             }
@@ -122,30 +139,34 @@ class Mcp(
 
           post("/message") {
             try {
-              val sessionId =
-                call.request.queryParameters["sessionId"]
-                  ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing sessionId parameter")
+              withTimeout(analysisTimeoutMs) {
+                val sessionId =
+                  call.request.queryParameters["sessionId"]
+                    ?: return@withTimeout call.respond(HttpStatusCode.BadRequest, "Missing sessionId parameter")
 
-              logger.debug("Handling message for session: $sessionId")
+                logger.debug("Handling message for session: $sessionId")
 
-              val server = servers[sessionId]
-              if (server == null) {
-                logger.warn("Session not found: $sessionId")
-                call.respond(HttpStatusCode.NotFound, "Session not found")
-                return@post
+                val server = servers[sessionId]
+                if (server == null) {
+                  logger.warn("Session not found: $sessionId")
+                  call.respond(HttpStatusCode.NotFound, "Session not found")
+                  return@withTimeout
+                }
+
+                val transport = server.transport as? SseServerTransport
+                if (transport == null) {
+                  logger.warn("Invalid transport for session: $sessionId")
+                  call.respond(HttpStatusCode.InternalServerError, "Invalid transport")
+                  return@withTimeout
+                }
+
+                logger.debug("Handling message for session: $sessionId")
+                transport.handlePostMessage(call)
+                call.respond(HttpStatusCode.OK)
               }
-
-              val transport = server.transport as? SseServerTransport
-              if (transport == null) {
-                logger.warn("Invalid transport for session: $sessionId")
-                call.respond(HttpStatusCode.InternalServerError, "Invalid transport")
-                return@post
-              }
-
-              logger.debug("Handling message for session: $sessionId")
-              withTimeout(3_600_000) { transport.handlePostMessage(call) }
-
-              call.respond(HttpStatusCode.OK)
+            } catch (e: TimeoutCancellationException) {
+              logger.error("Message handling timed out")
+              call.respond(HttpStatusCode.RequestTimeout, "Request timed out")
             } catch (e: Exception) {
               logger.error("Error handling message: ${e.message}", e)
               call.respond(HttpStatusCode.InternalServerError, "Error: ${e.message}")
@@ -223,7 +244,7 @@ class Mcp(
 
         val startTime = System.currentTimeMillis()
         logger.info("Starting repository analysis for: $repoUrl")
-        val result = withTimeout(3_600_000) { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
+        val result = withTimeout(analysisTimeoutMs) { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
         val duration = System.currentTimeMillis() - startTime
         logger.info("Analysis completed in ${duration}ms")
 
@@ -234,7 +255,7 @@ class Mcp(
             listOf(
               TextContent(
                 buildString {
-                  append("Repository analysis timed out after 2 minutes. ")
+                  append("Repository analysis timed out after $analysisTimeoutMinutes minutes. ")
                   append("Large repositories may take longer to analyze. ")
                   append("Try with a smaller repository or specific branch.")
                 }
