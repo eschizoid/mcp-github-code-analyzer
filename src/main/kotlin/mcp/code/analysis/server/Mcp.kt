@@ -214,15 +214,30 @@ class Mcp(
   }
 
   /**
-   * Configures the MCP server with tools and their respective functionalities.
+   * Configures the MCP server with tools, prompts, and resources for GitHub repository analysis.
    *
-   * @return The configured MCP server instance.
+   * Sets up three main tools:
+   * - **analyze-repository**: Analyzes GitHub repositories to provide comprehensive code insights and structure
+   *   summary. Supports any public GitHub repository URL, branch-specific analysis (defaults to 'main'), automatic
+   *   caching to prevent duplicate analysis, synchronous analysis for quick responses (up to 20s timeout), and
+   *   background processing for large repositories with progress tracking.
+   * - **check-analysis-status**: Monitors the progress and completion status of repository analysis operations.
+   *   Provides real-time progress tracking for background analyses, status reporting (Running, Completed, Cancelled,
+   *   Failed), retrieval of completed analysis results, and error reporting for failed operations.
+   * - **cancel-analysis**: Cancels running repository analysis operations with optional cache management. Offers
+   *   immediate cancellation of background analysis jobs, optional cache clearing to remove stored results, detailed
+   *   feedback on what actions were performed, and backward compatibility with existing usage patterns.
+   *
+   * Additionally, configures prompts for codebase analysis and code review templates, plus resources for accessing
+   * analysis results and repository metrics.
+   *
+   * @return The configured MCP server instance with all tools, prompts, and resources registered.
    */
   fun configureServer(): SdkServer {
     logger.info("Configuring MCP server with implementation: ${implementation.name} v${implementation.version}")
     val server = SdkServer(implementation, serverOptions)
 
-    server. addTool(
+    server.addTool(
       name = "analyze-repository",
       description = "Analyzes GitHub repositories to provide code insights and structure summary",
       inputSchema =
@@ -298,11 +313,11 @@ class Mcp(
             content =
               listOf(
                 TextContent(
-                    buildString {
-                        append("Repository analysis started in the background for: $repoUrl (branch: $branch).")
-                        append("This may take several minutes for large repositories. ")
-                        append("Use 'check-analysis-status' tool to monitor progress.")
-                    }
+                  buildString {
+                    append("Repository analysis started in the background for: $repoUrl (branch: $branch).")
+                    append("This may take several minutes for large repositories. ")
+                    append("Use 'check-analysis-status' tool to monitor progress.")
+                  }
                 )
               ),
             isError = false,
@@ -385,7 +400,7 @@ class Mcp(
 
     server.addTool(
       name = "cancel-analysis",
-      description = "Cancel a running repository analysis operation",
+      description = "Cancel a running repository analysis operation with optional cache clearing",
       inputSchema =
         Tool.Input(
           properties =
@@ -402,6 +417,13 @@ class Mcp(
                       "description" to JsonPrimitive("Branch to cancel (default: main)"),
                     )
                   ),
+                "clearCache" to
+                  JsonObject(
+                    mapOf(
+                      "type" to JsonPrimitive("boolean"),
+                      "description" to JsonPrimitive("Whether to clear cached results (default: false)"),
+                    )
+                  ),
               )
             ),
           required = listOf("repoUrl"),
@@ -412,15 +434,36 @@ class Mcp(
           request.arguments["repoUrl"]?.jsonPrimitive?.content
             ?: throw IllegalArgumentException("Missing repoUrl parameter")
         val branch = request.arguments["branch"]?.jsonPrimitive?.content ?: "main"
+        val clearCache = request.arguments["clearCache"]?.jsonPrimitive?.content?.toBoolean() ?: false
         val operationKey = "$repoUrl:$branch"
 
-        asyncOperations[operationKey]?.let { job ->
-          job.cancel()
-          asyncOperations.remove(operationKey)
-          operationProgress[operationKey] = "Analysis cancelled by user"
+        val hadRunningOperation = asyncOperations[operationKey] != null
+        val hadCachedResults = operationResults.containsKey(operationKey)
 
-          CallToolResult(content = listOf(TextContent("Analysis cancelled for repository: $repoUrl (branch: $branch)")))
-        } ?: CallToolResult(content = listOf(TextContent("No running analysis found for this repository.")))
+        asyncOperations[operationKey]?.cancel()
+        asyncOperations.remove(operationKey)
+
+        if (clearCache) {
+          operationResults.remove(operationKey)
+        }
+
+        operationProgress[operationKey] = "Analysis cancelled by user"
+
+        val repoInfo = "$repoUrl (branch: $branch)"
+        val message =
+          when {
+            hadRunningOperation && clearCache -> {
+              val cacheMsg = if (hadCachedResults) " and cached results cleared" else " and cache cleared"
+              "Analysis cancelled$cacheMsg for repository: $repoInfo"
+            }
+            hadRunningOperation -> "Analysis cancelled for repository: $repoInfo. Cached results preserved."
+            clearCache && hadCachedResults ->
+              "No running analysis found, but cleared cached results for repository: $repoInfo"
+            clearCache -> "No running analysis or cached results found for repository: $repoInfo"
+            else -> "No running analysis found for this repository."
+          }
+
+        CallToolResult(content = listOf(TextContent(message)))
       } catch (e: Exception) {
         CallToolResult(content = listOf(TextContent("Error cancelling analysis: ${e.message}")), isError = true)
       }
