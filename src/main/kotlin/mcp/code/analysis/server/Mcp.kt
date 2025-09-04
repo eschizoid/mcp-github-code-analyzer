@@ -18,6 +18,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.SseServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import io.modelcontextprotocol.kotlin.sdk.server.mcp
 import java.util.Locale.getDefault
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.*
 import kotlinx.io.asSink
 import kotlinx.io.asSource
@@ -48,8 +49,10 @@ class Mcp(
         )
     ),
 ) {
-  private val analysisTimeoutMs: Long = 3_600_000L // 60 minutes
-  private val analysisTimeoutMinutes: Long = analysisTimeoutMs / 60_000L
+
+  private val asyncOperations = ConcurrentHashMap<String, Job>()
+  private val operationResults = ConcurrentHashMap<String, String>()
+  private val operationProgress = ConcurrentHashMap<String, String>()
 
   /** Starts an MCP server using standard input/output (stdio) for communication. */
   fun runUsingStdio() {
@@ -81,6 +84,7 @@ class Mcp(
 
     embeddedServer(CIO, host = "0.0.0.0", port = port) {
         install(SSE)
+
         install(CORS) {
           anyHost()
           allowCredentials = true
@@ -90,6 +94,8 @@ class Mcp(
           allowMethod(HttpMethod.Get)
           allowHeader(HttpHeaders.ContentType)
           allowHeader(HttpHeaders.Accept)
+          allowHeader(HttpHeaders.Authorization)
+          allowHeader("X-Requested-With")
           allowHeader("Cache-Control")
         }
 
@@ -104,13 +110,15 @@ class Mcp(
             servers[transport.sessionId] = server
             logger.info("Created server for session: ${transport.sessionId}")
 
-            val heartbeatJob = launch {
+            send(ServerSentEvent("connected", event = "connection"))
+
+            val keepAliveJob = launch {
               while (isActive) {
                 try {
-                  send(ServerSentEvent("heartbeat", event = "ping"))
-                  delay(25_000)
+                  send(ServerSentEvent("ping", event = "keepalive"))
+                  delay(10_000)
                 } catch (e: Exception) {
-                  logger.debug("Heartbeat failed: ${e.message}")
+                  logger.debug("Keep-alive failed for session ${transport.sessionId}: ${e.message}")
                   break
                 }
               }
@@ -119,7 +127,12 @@ class Mcp(
             server.onClose {
               logger.info("Server closed for session: ${transport.sessionId}")
               servers.remove(transport.sessionId)
-              heartbeatJob.cancel()
+              keepAliveJob.cancel()
+              asyncOperations.keys.forEach { operationKey ->
+                asyncOperations[operationKey]?.cancel()
+                asyncOperations.remove(operationKey)
+                operationProgress.remove(operationKey)
+              }
             }
 
             try {
@@ -131,7 +144,7 @@ class Mcp(
               logger.error("Connection error for session ${transport.sessionId}: ${e.message}", e)
               throw e
             } finally {
-              heartbeatJob.cancel()
+              keepAliveJob.cancel()
               servers.remove(transport.sessionId)
               logger.info("SSE connection closed for session: ${transport.sessionId}")
             }
@@ -139,7 +152,7 @@ class Mcp(
 
           post("/message") {
             try {
-              withTimeout(analysisTimeoutMs) {
+              withTimeout(15_000) {
                 val sessionId =
                   call.request.queryParameters["sessionId"]
                     ?: return@withTimeout call.respond(HttpStatusCode.BadRequest, "Missing sessionId parameter")
@@ -160,13 +173,13 @@ class Mcp(
                   return@withTimeout
                 }
 
-                logger.debug("Handling message for session: $sessionId")
+                logger.debug("Processing message for session: $sessionId")
                 transport.handlePostMessage(call)
                 call.respond(HttpStatusCode.OK)
               }
-            } catch (e: TimeoutCancellationException) {
-              logger.error("Message handling timed out")
-              call.respond(HttpStatusCode.RequestTimeout, "Request timed out")
+            } catch (_: TimeoutCancellationException) {
+              logger.error("Message handling timed out after 15 seconds")
+              call.respond(HttpStatusCode.RequestTimeout, "Request processing timed out")
             } catch (e: Exception) {
               logger.error("Error handling message: ${e.message}", e)
               call.respond(HttpStatusCode.InternalServerError, "Error: ${e.message}")
@@ -209,7 +222,7 @@ class Mcp(
     logger.info("Configuring MCP server with implementation: ${implementation.name} v${implementation.version}")
     val server = SdkServer(implementation, serverOptions)
 
-    server.addTool(
+    server. addTool(
       name = "analyze-repository",
       description = "Analyzes GitHub repositories to provide code insights and structure summary",
       inputSchema =
@@ -242,30 +255,174 @@ class Mcp(
           arguments["repoUrl"]?.jsonPrimitive?.content ?: throw IllegalArgumentException("Missing repoUrl parameter")
         val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
 
-        val startTime = System.currentTimeMillis()
-        logger.info("Starting repository analysis for: $repoUrl")
-        val result = withTimeout(analysisTimeoutMs) { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
-        val duration = System.currentTimeMillis() - startTime
-        logger.info("Analysis completed in ${duration}ms")
+        val operationKey = "$repoUrl:$branch"
+        operationResults[operationKey]?.let { result ->
+          return@addTool CallToolResult(content = listOf(TextContent("Cached result: $result")))
+        }
 
-        CallToolResult(content = listOf(TextContent(result)))
-      } catch (e: TimeoutCancellationException) {
-        CallToolResult(
-          content =
-            listOf(
-              TextContent(
-                buildString {
-                  append("Repository analysis timed out after $analysisTimeoutMinutes minutes. ")
-                  append("Large repositories may take longer to analyze. ")
-                  append("Try with a smaller repository or specific branch.")
-                }
-              )
-            ),
-          isError = true,
-        )
+        try {
+          val startTime = System.currentTimeMillis()
+          logger.info("Starting repository analysis for: $repoUrl")
+
+          val result = withTimeout(20_000) { repositoryAnalysisService.analyzeRepository(repoUrl, branch) }
+
+          val duration = System.currentTimeMillis() - startTime
+          logger.info("Analysis completed in ${duration}ms")
+
+          operationResults[operationKey] = result
+          CallToolResult(content = listOf(TextContent(result)))
+        } catch (_: TimeoutCancellationException) {
+          val asyncJob =
+            CoroutineScope(Dispatchers.IO).launch {
+              try {
+                logger.info("Starting background analysis for: $repoUrl")
+                operationProgress[operationKey] = "Starting analysis..."
+                operationProgress[operationKey] = "Processing files and dependencies..."
+                val result = repositoryAnalysisService.analyzeRepository(repoUrl, branch)
+
+                operationResults[operationKey] = result
+                operationProgress[operationKey] = "Analysis completed successfully"
+
+                logger.info("Background analysis completed for: $repoUrl")
+              } catch (e: Exception) {
+                logger.error("Background analysis failed for $repoUrl: ${e.message}", e)
+                operationProgress[operationKey] = "Analysis failed: ${e.message}"
+              } finally {
+                asyncOperations.remove(operationKey)
+              }
+            }
+
+          asyncOperations[operationKey] = asyncJob
+
+          CallToolResult(
+            content =
+              listOf(
+                TextContent(
+                    buildString {
+                        append("Repository analysis started in the background for: $repoUrl (branch: $branch).")
+                        append("This may take several minutes for large repositories. ")
+                        append("Use 'check-analysis-status' tool to monitor progress.")
+                    }
+                )
+              ),
+            isError = false,
+          )
+        }
       } catch (e: Exception) {
         logger.error("Analysis failed: ${e.message}", e)
         CallToolResult(content = listOf(TextContent("Error analyzing repository: ${e.message}")), isError = true)
+      }
+    }
+
+    server.addTool(
+      name = "check-analysis-status",
+      description = "Check the status of a repository analysis operation",
+      inputSchema =
+        Tool.Input(
+          properties =
+            JsonObject(
+              mapOf(
+                "repoUrl" to
+                  JsonObject(
+                    mapOf("type" to JsonPrimitive("string"), "description" to JsonPrimitive("GitHub repository URL"))
+                  ),
+                "branch" to
+                  JsonObject(
+                    mapOf(
+                      "type" to JsonPrimitive("string"),
+                      "description" to JsonPrimitive("Branch to check (default: main)"),
+                    )
+                  ),
+              )
+            ),
+          required = listOf("repoUrl"),
+        ),
+    ) { request ->
+      try {
+        val repoUrl =
+          request.arguments["repoUrl"]?.jsonPrimitive?.content
+            ?: throw IllegalArgumentException("Missing repoUrl parameter")
+        val branch = request.arguments["branch"]?.jsonPrimitive?.content ?: "main"
+        val operationKey = "$repoUrl:$branch"
+
+        when {
+          operationResults.containsKey(operationKey) -> {
+            val result = operationResults[operationKey]!!
+            CallToolResult(content = listOf(TextContent("Analysis completed successfully:\n\n$result")))
+          }
+          asyncOperations.containsKey(operationKey) -> {
+            val progress = operationProgress[operationKey] ?: "Analysis in progress..."
+            val job = asyncOperations[operationKey]!!
+            val status =
+              when {
+                job.isCompleted -> "Completed"
+                job.isCancelled -> "Cancelled"
+                else -> "Running"
+              }
+            CallToolResult(content = listOf(TextContent("Analysis status: $status\nProgress: $progress")))
+          }
+          operationProgress.containsKey(operationKey) -> {
+            val progress = operationProgress[operationKey]!!
+            if (progress.startsWith("Analysis failed:")) {
+              CallToolResult(
+                content = listOf(TextContent("Analysis failed: ${progress.substring(16)}")),
+                isError = true,
+              )
+            } else {
+              CallToolResult(content = listOf(TextContent("Final status: $progress")))
+            }
+          }
+          else -> {
+            CallToolResult(
+              content = listOf(TextContent("No analysis found for this repository. Run 'analyze-repository' first."))
+            )
+          }
+        }
+      } catch (e: Exception) {
+        CallToolResult(content = listOf(TextContent("Error checking status: ${e.message}")), isError = true)
+      }
+    }
+
+    server.addTool(
+      name = "cancel-analysis",
+      description = "Cancel a running repository analysis operation",
+      inputSchema =
+        Tool.Input(
+          properties =
+            JsonObject(
+              mapOf(
+                "repoUrl" to
+                  JsonObject(
+                    mapOf("type" to JsonPrimitive("string"), "description" to JsonPrimitive("GitHub repository URL"))
+                  ),
+                "branch" to
+                  JsonObject(
+                    mapOf(
+                      "type" to JsonPrimitive("string"),
+                      "description" to JsonPrimitive("Branch to cancel (default: main)"),
+                    )
+                  ),
+              )
+            ),
+          required = listOf("repoUrl"),
+        ),
+    ) { request ->
+      try {
+        val repoUrl =
+          request.arguments["repoUrl"]?.jsonPrimitive?.content
+            ?: throw IllegalArgumentException("Missing repoUrl parameter")
+        val branch = request.arguments["branch"]?.jsonPrimitive?.content ?: "main"
+        val operationKey = "$repoUrl:$branch"
+
+        asyncOperations[operationKey]?.let { job ->
+          job.cancel()
+          asyncOperations.remove(operationKey)
+          operationProgress[operationKey] = "Analysis cancelled by user"
+
+          CallToolResult(content = listOf(TextContent("Analysis cancelled for repository: $repoUrl (branch: $branch)")))
+        } ?: CallToolResult(content = listOf(TextContent("No running analysis found for this repository.")))
+      } catch (e: Exception) {
+        CallToolResult(content = listOf(TextContent("Error cancelling analysis: ${e.message}")), isError = true)
       }
     }
 
@@ -396,7 +553,7 @@ class Mcp(
       )
     }
 
-    logger.info("MCP server configured successfully with 1 tool, 2 prompts, and 2 resources")
+    logger.info("MCP server configured successfully with 3 tools, 2 prompts, and 2 resources")
     return server
   }
 }
