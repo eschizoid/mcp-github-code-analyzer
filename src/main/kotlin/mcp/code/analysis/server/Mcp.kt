@@ -293,7 +293,6 @@ class Mcp(
                 )
             )
           } else {
-            // Clean up completed/cancelled job
             asyncOperations.remove(operationKey)
           }
         }

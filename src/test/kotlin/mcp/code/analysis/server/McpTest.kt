@@ -5,6 +5,7 @@ import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.TextContent
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
+import kotlin.text.get
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -165,5 +166,232 @@ class McpTest {
     assertNotNull(textContent, "Content should be TextContent")
     assertEquals(expectedSummary, textContent?.text)
     coVerify { repositoryAnalysisService.analyzeRepository(repoUrl, defaultBranch) }
+  }
+
+  @Test
+  fun `check-analysis-status tool handler returns completed analysis result`() = runBlocking {
+    // Arrange
+    val repoUrl = "https://github.com/test/repo"
+    val branch = "main"
+    val analysisResult = "Analysis completed successfully"
+    coEvery { repositoryAnalysisService.analyzeRepository(repoUrl, branch) } returns analysisResult
+
+    // Act
+    serverUnderTest.configureServer()
+
+    // First analyze repository to cache result
+    val analyzeRequest =
+      CallToolRequest(
+        arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl), "branch" to JsonPrimitive(branch))),
+        name = "analyze-repository",
+      )
+    toolHandlers["analyze-repository"]!!.invoke(analyzeRequest)
+
+    // Then check status
+    val statusRequest =
+      CallToolRequest(
+        arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl), "branch" to JsonPrimitive(branch))),
+        name = "check-analysis-status",
+      )
+    val result = toolHandlers["check-analysis-status"]!!.invoke(statusRequest)
+
+    // Assert
+    assertFalse(result.isError == true, "Result should not be an error")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("Analysis completed successfully") == true,
+      "Should contain completion message. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `check-analysis-status tool handler returns no analysis found`() = runBlocking {
+    // Arrange
+    val repoUrl = "https://github.com/test/repo"
+    val branch = "main"
+
+    // Act
+    serverUnderTest.configureServer()
+
+    val request =
+      CallToolRequest(
+        arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl), "branch" to JsonPrimitive(branch))),
+        name = "check-analysis-status",
+      )
+    val result = toolHandlers["check-analysis-status"]!!.invoke(request)
+
+    // Assert
+    assertFalse(result.isError == true, "Result should not be an error")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("No analysis found for this repository") == true,
+      "Should contain no analysis message. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `check-analysis-status tool handler uses default branch if not provided`() = runBlocking {
+    // Arrange
+    val repoUrl = "https://github.com/test/repo"
+    val defaultBranch = "main"
+
+    // Act
+    serverUnderTest.configureServer()
+
+    val request =
+      CallToolRequest(
+        arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl))),
+        name = "check-analysis-status",
+      )
+    val result = toolHandlers["check-analysis-status"]!!.invoke(request)
+
+    // Assert
+    assertFalse(result.isError == true, "Result should not be an error")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("No analysis found for this repository") == true,
+      "Should handle default branch correctly. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `check-analysis-status tool handler processes missing repoUrl argument`() = runBlocking {
+    // Act
+    serverUnderTest.configureServer()
+
+    val request =
+      CallToolRequest(arguments = JsonObject(mapOf("branch" to JsonPrimitive("main"))), name = "check-analysis-status")
+    val result = toolHandlers["check-analysis-status"]!!.invoke(request)
+
+    // Assert
+    assertTrue(result.isError == true, "Result should be an error for missing repoUrl")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("Error checking status: Missing repoUrl parameter") == true,
+      "Error message for missing repoUrl mismatch. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `cancel-analysis tool handler cancels running operation`() = runBlocking {
+    // Arrange
+    val repoUrl = "https://github.com/test/repo"
+    val branch = "main"
+
+    // Act
+    serverUnderTest.configureServer()
+
+    val request =
+      CallToolRequest(
+        arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl), "branch" to JsonPrimitive(branch))),
+        name = "cancel-analysis",
+      )
+    val result = toolHandlers["cancel-analysis"]!!.invoke(request)
+
+    // Assert
+    assertFalse(result.isError == true, "Result should not be an error")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("No running analysis found") == true,
+      "Should indicate no running analysis. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `cancel-analysis tool handler with clearCache clears cached results`() = runBlocking {
+    // Arrange
+    val repoUrl = "https://github.com/test/repo"
+    val branch = "main"
+    val analysisResult = "Analysis completed"
+    coEvery { repositoryAnalysisService.analyzeRepository(repoUrl, branch) } returns analysisResult
+
+    // Act
+    serverUnderTest.configureServer()
+
+    // First analyze repository to cache result
+    val analyzeRequest =
+      CallToolRequest(
+        arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl), "branch" to JsonPrimitive(branch))),
+        name = "analyze-repository",
+      )
+    toolHandlers["analyze-repository"]!!.invoke(analyzeRequest)
+
+    // Then cancel with clearCache=true
+    val cancelRequest =
+      CallToolRequest(
+        arguments =
+          JsonObject(
+            mapOf(
+              "repoUrl" to JsonPrimitive(repoUrl),
+              "branch" to JsonPrimitive(branch),
+              "clearCache" to JsonPrimitive("true"),
+            )
+          ),
+        name = "cancel-analysis",
+      )
+    val result = toolHandlers["cancel-analysis"]!!.invoke(cancelRequest)
+
+    // Assert
+    assertFalse(result.isError == true, "Result should not be an error")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("cleared cached results") == true,
+      "Should indicate cache was cleared. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `cancel-analysis tool handler uses default branch if not provided`() = runBlocking {
+    // Arrange
+    val repoUrl = "https://github.com/test/repo"
+
+    // Act
+    serverUnderTest.configureServer()
+
+    val request =
+      CallToolRequest(arguments = JsonObject(mapOf("repoUrl" to JsonPrimitive(repoUrl))), name = "cancel-analysis")
+    val result = toolHandlers["cancel-analysis"]!!.invoke(request)
+
+    // Assert
+    assertFalse(result.isError == true, "Result should not be an error")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("No running analysis found") == true,
+      "Should handle default branch correctly. Actual: ${textContent?.text}",
+    )
+  }
+
+  @Test
+  fun `cancel-analysis tool handler processes missing repoUrl argument`() = runBlocking {
+    // Act
+    serverUnderTest.configureServer()
+
+    val request =
+      CallToolRequest(arguments = JsonObject(mapOf("branch" to JsonPrimitive("main"))), name = "cancel-analysis")
+    val result = toolHandlers["cancel-analysis"]!!.invoke(request)
+
+    // Assert
+    assertTrue(result.isError == true, "Result should be an error for missing repoUrl")
+    assertEquals(1, result.content.size)
+    val textContent = result.content.first() as? TextContent
+    assertNotNull(textContent, "Content should be TextContent")
+    assertTrue(
+      textContent?.text?.contains("Error cancelling analysis: Missing repoUrl parameter") == true,
+      "Error message for missing repoUrl mismatch. Actual: ${textContent?.text}",
+    )
   }
 }
