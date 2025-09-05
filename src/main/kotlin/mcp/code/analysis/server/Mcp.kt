@@ -271,8 +271,31 @@ class Mcp(
         val branch = arguments["branch"]?.jsonPrimitive?.content ?: "main"
 
         val operationKey = "$repoUrl:$branch"
+
         operationResults[operationKey]?.let { result ->
           return@addTool CallToolResult(content = listOf(TextContent("Cached result: $result")))
+        }
+
+        asyncOperations[operationKey]?.let { job ->
+          if (job.isActive) {
+            val progress = operationProgress[operationKey] ?: "Analysis in progress..."
+            return@addTool CallToolResult(
+              content =
+                listOf(
+                  TextContent(
+                    """
+                      Analysis already in progress for: $repoUrl (branch: $branch).
+                      Current progress: $progress
+                      Use 'check-analysis-status' to monitor progress.
+                      """
+                      .trimIndent()
+                  )
+                )
+            )
+          } else {
+            // Clean up completed/cancelled job
+            asyncOperations.remove(operationKey)
+          }
         }
 
         try {
@@ -313,11 +336,12 @@ class Mcp(
             content =
               listOf(
                 TextContent(
-                  buildString {
-                    append("Repository analysis started in the background for: $repoUrl (branch: $branch).")
-                    append("This may take several minutes for large repositories. ")
-                    append("Use 'check-analysis-status' tool to monitor progress.")
-                  }
+                  """
+                  Repository analysis started in the background for: $repoUrl (branch: $branch).
+                  This may take several minutes for large repositories.
+                  Use 'check-analysis-status' tool to monitor progress.
+                  """
+                    .trimIndent()
                 )
               ),
             isError = false,
