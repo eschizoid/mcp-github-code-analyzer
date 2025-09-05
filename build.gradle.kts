@@ -69,7 +69,7 @@ dependencies {
   implementation("ch.qos.logback:logback-classic:1.5.18")
 
   // JGit for repository interaction
-  implementation("org.eclipse.jgit:org.eclipse.jgit:7.2.1.202505142326-r")
+  implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
 
   implementation("io.github.tree-sitter:ktreesitter-jvm:0.24.1")
 
