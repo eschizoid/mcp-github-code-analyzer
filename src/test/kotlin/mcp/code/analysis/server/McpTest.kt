@@ -5,7 +5,6 @@ import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.TextContent
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
-import kotlin.text.get
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -237,7 +236,6 @@ class McpTest {
   fun `check-analysis-status tool handler uses default branch if not provided`() = runBlocking {
     // Arrange
     val repoUrl = "https://github.com/test/repo"
-    val defaultBranch = "main"
 
     // Act
     serverUnderTest.configureServer()
