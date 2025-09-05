@@ -11,7 +11,7 @@ plugins {
   kotlin("plugin.serialization") version "2.2.10"
   id("com.diffplug.spotless") version "7.2.1"
   id("io.kotest.multiplatform") version "5.9.1"
-  id("org.jreleaser") version "1.19.0"
+  id("org.jreleaser") version "1.17.0"
   id("pl.allegro.tech.build.axion-release") version "1.20.1"
 }
 
@@ -69,7 +69,7 @@ dependencies {
   implementation("ch.qos.logback:logback-classic:1.5.18")
 
   // JGit for repository interaction
-  implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
+  implementation("org.eclipse.jgit:org.eclipse.jgit:7.2.1.202505142326-r")
 
   implementation("io.github.tree-sitter:ktreesitter-jvm:0.24.1")
 
