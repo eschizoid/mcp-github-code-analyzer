@@ -4,7 +4,11 @@ import io.modelcontextprotocol.kotlin.sdk.ReadResourceResult
 import io.modelcontextprotocol.kotlin.sdk.TextResourceContents
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
 
-/** Registers resource endpoints on the provided MCP server. */
+/**
+ * Registers resource endpoints on the provided MCP server.
+ *
+ * @param server The MCP server instance to register resources on.
+ */
 internal fun registerResources(server: SdkServer) {
   server.addResource(
     uri = "repo://analysis-results",

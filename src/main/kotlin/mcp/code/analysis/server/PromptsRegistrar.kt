@@ -8,7 +8,11 @@ import io.modelcontextprotocol.kotlin.sdk.TextContent
 import io.modelcontextprotocol.kotlin.sdk.server.Server as SdkServer
 import java.util.Locale.getDefault
 
-/** Registers prompt templates on the provided MCP server. */
+/**
+ * Registers prompt templates on the provided MCP server.
+ *
+ * @param server The MCP server instance to register prompts on.
+ */
 internal fun registerPrompts(server: SdkServer) {
   server.addPrompt(
     name = "analyze-codebase",

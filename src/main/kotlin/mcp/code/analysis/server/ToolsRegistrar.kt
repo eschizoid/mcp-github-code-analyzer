@@ -30,8 +30,12 @@ import org.slf4j.Logger
  *   immediate cancellation of background analysis jobs, optional cache clearing to remove stored results, detailed
  *   feedback on what actions were performed, and backward compatibility with existing usage patterns.
  *
- * Additionally, configures prompts for codebase analysis and code review templates, plus resources for accessing
- * analysis results and repository metrics.
+ * @param server The server to register tools on.
+ * @param repositoryAnalysisService The service used to perform repository analysis.
+ * @param logger The logger to use for logging.
+ * @param asyncOperations A map of asynchronous repository analysis operations.
+ * @param operationResults A map of cached analysis results.
+ * @param operationProgress A map of analysis progress messages.
  */
 internal fun registerTools(
   server: SdkServer,

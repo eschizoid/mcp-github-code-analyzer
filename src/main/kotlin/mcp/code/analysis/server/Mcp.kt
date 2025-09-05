@@ -212,6 +212,9 @@ class Mcp(
   /**
    * Configures the MCP server with tools, prompts, and resources for GitHub repository analysis.
    *
+   * Additionally, configures prompts for codebase analysis and code review templates, plus resources for accessing
+   * analysis results and repository metrics.
+   *
    * @return The configured MCP server instance with all tools, prompts, and resources registered.
    */
   fun configureServer(): SdkServer {
