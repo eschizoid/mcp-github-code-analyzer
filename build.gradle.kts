@@ -39,6 +39,11 @@ dependencies {
   // Kotlin standard library
   implementation(kotlin("stdlib"))
 
+  // Kotlin
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+  implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+  implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.0")
+
   // Ktor server
   implementation("io.ktor:ktor-client-cio:$ktorVersion")
   implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
@@ -55,12 +60,6 @@ dependencies {
 
   // Logging
   implementation("ch.qos.logback:logback-classic:1.5.18")
-
-  // Coroutines
-  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-
-  // Serialization
-  implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
   // JGit for repository interaction
   implementation("org.eclipse.jgit:org.eclipse.jgit:7.2.1.202505142326-r")
