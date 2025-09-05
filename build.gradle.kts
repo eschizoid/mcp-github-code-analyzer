@@ -9,10 +9,10 @@ plugins {
   jacoco
   kotlin("jvm") version "2.2.10"
   kotlin("plugin.serialization") version "2.2.10"
-  id("com.diffplug.spotless") version "7.0.3"
+  id("com.diffplug.spotless") version "7.2.1"
   id("io.kotest.multiplatform") version "5.9.1"
-  id("org.jreleaser") version "1.17.0"
-  id("pl.allegro.tech.build.axion-release") version "1.18.7"
+  id("org.jreleaser") version "1.19.0"
+  id("pl.allegro.tech.build.axion-release") version "1.20.1"
 }
 
 scmVersion {
@@ -20,7 +20,14 @@ scmVersion {
   tag { prefix.set("v") }
   versionCreator("versionWithBranch")
   branchVersionCreator.set(mapOf("main" to "simple"))
-  versionIncrementer("incrementMinor")
+  val incrementType =
+    when (project.findProperty("release.incrementer")?.toString()) {
+      "patch" -> "incrementPatch"
+      "minor" -> "incrementMinor"
+      "major" -> "incrementMajor"
+      else -> "incrementMinor"
+    }
+  versionIncrementer(incrementType)
   branchVersionIncrementer.set(mapOf("feature/.*" to "incrementMinor", "bugfix/.*" to "incrementPatch"))
 }
 
@@ -224,7 +231,7 @@ jreleaser {
   release {
     github {
       enabled.set(true)
-      overwrite.set(false)
+      overwrite.set(true)
     }
   }
 }
