@@ -230,8 +230,8 @@ jreleaser {
 
   release {
     github {
-      enabled.set(true)
-      overwrite.set(true)
+      enabled.set(false)
+      overwrite.set(false)
     }
   }
 }
