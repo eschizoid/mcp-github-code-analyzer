@@ -50,7 +50,7 @@ dependencies {
   // Kotlin standard library
   implementation(kotlin("stdlib"))
 
-  // Kotlin
+  // Kotlin extensions
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
   implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.0")
@@ -59,12 +59,12 @@ dependencies {
   implementation("io.ktor:ktor-client-cio:$ktorVersion")
   implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
   implementation("io.ktor:ktor-client-core:$ktorVersion")
+  implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
   implementation("io.ktor:ktor-server-core:$ktorVersion")
   implementation("io.ktor:ktor-server-netty:$ktorVersion")
   implementation("io.ktor:ktor-server-sse:$ktorVersion")
   implementation("io.ktor:ktor-server-cors:${ktorVersion}")
   implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
-  implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
 
   // MCP SDK
   implementation("io.modelcontextprotocol:kotlin-sdk:$mcpKotlinSdk")
@@ -74,8 +74,6 @@ dependencies {
 
   // JGit for repository interaction
   implementation("org.eclipse.jgit:org.eclipse.jgit:6.10.1.202505221210-r")
-
-  implementation("io.github.tree-sitter:ktreesitter-jvm:0.24.1")
 
   // Testing
   testImplementation(kotlin("test"))
@@ -235,7 +233,7 @@ jreleaser {
   release {
     github {
       enabled.set(true)
-      overwrite.set(false)
+      overwrite.set(true)
     }
   }
 }

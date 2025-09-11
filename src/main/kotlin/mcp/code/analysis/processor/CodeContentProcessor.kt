@@ -92,7 +92,7 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
     return when {
       trimmed.contains("{") && !trimmed.contains("}") -> "$trimmed }"
       trimmed.endsWith(";") -> trimmed
-      trimmed.endsWith(":") -> trimmed // Python, YAML style
+      trimmed.endsWith(":") -> trimmed
       else -> trimmed
     }
   }
@@ -101,9 +101,9 @@ internal class CodeContentProcessor(private val patterns: LanguagePatterns, priv
     when {
       trimmed.startsWith(patterns.blockCommentStart) && !trimmed.endsWith(patterns.blockCommentEnd) -> true
       trimmed.endsWith(patterns.blockCommentEnd) -> false
-      trimmed == "\"\"\"" -> !currentInCommentBlock // Python docstrings
+      trimmed == "\"\"\"" -> !currentInCommentBlock
       trimmed.startsWith("'''") && trimmed.endsWith("'''") && trimmed.length > 6 -> currentInCommentBlock // Single line
-      trimmed == "'''" -> !currentInCommentBlock // Python triple quotes
+      trimmed == "'''" -> !currentInCommentBlock
       else -> currentInCommentBlock
     }
 }
